@@ -85,19 +85,20 @@ export function Welcome() {
           <p className="text-xl md:text-2xl text-slate-600 dark:text-slate-400 max-w-3xl mx-auto mb-12 leading-relaxed font-light">
             {t('welcome.subtitle')}
           </p>
-          <div className="flex flex-col sm:flex-row justify-center items-center space-y-4 sm:space-y-0 sm:space-x-6">
+          <div className="flex flex-col sm:flex-row justify-center items-center space-y-5 sm:space-y-0 sm:space-x-6">
             <Link
               to="/register"
-              className="w-full sm:w-auto px-8 py-4 bg-gradient-to-r from-indigo-600 to-cyan-600 text-white rounded-2xl text-lg font-bold hover:from-indigo-500 hover:to-cyan-500 transition-all shadow-[0_0_30px_rgba(99,102,241,0.3)] dark:shadow-[0_0_30px_rgba(99,102,241,0.4)] hover:shadow-[0_0_40px_rgba(99,102,241,0.5)] transform hover:-translate-y-1 flex items-center justify-center space-x-2 group"
+              className="w-full sm:w-auto px-10 py-4 relative group overflow-hidden rounded-full bg-slate-900 dark:bg-white text-white dark:text-[#0B0F19] text-lg font-bold hover:-translate-y-1 hover:shadow-[0_0_40px_rgba(15,23,42,0.3)] dark:hover:shadow-[0_20px_40px_rgba(255,255,255,0.25)] transition-all duration-300 flex items-center justify-center space-x-2"
             >
-              <span>{t('welcome.deploy')}</span>
-              <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+              <div className="absolute inset-0 bg-white/20 dark:bg-black/10 translate-y-full group-hover:translate-y-0 transition-transform duration-500 ease-in-out"></div>
+              <span className="relative z-10">{t('welcome.deploy')}</span>
+              <ChevronRight className="w-6 h-6 relative z-10 group-hover:translate-x-1.5 transition-transform duration-300" />
             </Link>
             <Link
               to="/login"
-              className="w-full sm:w-auto px-8 py-4 bg-white/80 dark:bg-white/5 backdrop-blur-lg text-slate-800 dark:text-white border border-slate-200 dark:border-white/10 rounded-2xl text-lg font-bold hover:bg-white dark:hover:bg-white/10 transition-all flex items-center justify-center shadow-lg dark:shadow-none group"
+              className="w-full sm:w-auto px-10 py-4 rounded-full bg-white/50 dark:bg-white/5 backdrop-blur-md border border-slate-200 dark:border-white/10 hover:border-indigo-500/50 dark:hover:border-indigo-400/50 text-slate-800 dark:text-white text-lg font-bold hover:bg-white dark:hover:bg-white/10 hover:-translate-y-1 hover:shadow-[0_15px_30px_rgba(99,102,241,0.15)] transition-all duration-300 flex items-center justify-center group"
             >
-              {t('welcome.access')}
+              <span>{t('welcome.access')}</span>
             </Link>
           </div>
         </div>
