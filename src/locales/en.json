@@ -1,0 +1,74 @@
+{
+    "common": {
+        "loading": "Loading...",
+        "save": "Save",
+        "cancel": "Cancel",
+        "delete": "Delete",
+        "edit": "Edit",
+        "error": "An error occurred"
+    },
+    "nav": {
+        "dashboard": "Dashboard",
+        "reports": "Reports",
+        "reviewQueue": "Review Queue",
+        "analytics": "Analytics",
+        "admin": "Administration",
+        "users": "User Management",
+        "settings": "Settings",
+        "logout": "Logout",
+        "signIn": "Sign In",
+        "getStarted": "Get Started"
+    },
+    "settings": {
+        "title": "System Preferences",
+        "subtitle": "Manage your security vectors, interface themes, and localizations.",
+        "security": "Security Configuration",
+        "mfa": {
+            "title": "Multi-Factor Authentication (2FA)",
+            "description": "Secure your account with an additional verification step via a cryptographic authenticator app.",
+            "active": "Active",
+            "enable": "Enable 2FA Now",
+            "session": "Active Session",
+            "encrypted": "Encrypted"
+        },
+        "theme": {
+            "title": "Interface Theme",
+            "light": "Light Tactical",
+            "dark": "Dark Operations",
+            "system": "System Sync"
+        },
+        "language": {
+            "title": "Regional Localization",
+            "en": "English",
+            "enDesc": "United States / Global",
+            "fr": "Français",
+            "frDesc": "Europe / Afrique"
+        },
+        "info": {
+            "title": "Security Protocol Beta",
+            "desc": "Your preferences are currently synced locally. Ensure that you establish MFA on highly sensitive terminals.",
+            "status": "Network Status",
+            "encrypted": "Encrypted"
+        }
+    },
+    "welcome": {
+        "brand": "SIMCCS",
+        "title1": "Crisis Command.",
+        "title2": "Absolute Clarity.",
+        "subtitle": "Secure Information Management empowering field reporters, editors, and administrators with real-time integrity in volatile environments.",
+        "deploy": "Deploy Now",
+        "access": "Access Portal",
+        "card1": {
+            "title": "Offline-First Engine",
+            "desc": "Create and sync reports in unstable network conditions. Military-grade local encryption safeguards data until connectivity returns."
+        },
+        "card2": {
+            "title": "Zero-Trust Security",
+            "desc": "Enterprise architecture featuring mandatory TOTP MFA, strict JWT rotation, and immutable audit logs for complete accountability."
+        },
+        "card3": {
+            "title": "Real-Time Telemetry",
+            "desc": "Live intelligence dashboards. Monitor evolving crises, track casualty metrics, and deploy resources instantly."
+        }
+    }
+}

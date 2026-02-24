@@ -1,0 +1,13 @@
+﻿
+> vite-react-typescript-starter@0.0.0 typecheck
+> tsc --noEmit -p tsconfig.app.json
+
+src/pages/Chat.tsx(8,10): error TS2305: Module '"../types/api"' has no exported member 'ChannelDTO'.
+src/pages/Chat.tsx(10,11): error TS6133: 'User' is declared but its value is never read.
+src/pages/Chat.tsx(10,17): error TS6133: 'Clock' is declared but its value is never read.
+src/pages/Chat.tsx(10,36): error TS6133: 'Lock' is declared but its value is never read.
+src/pages/ReportDetails.tsx(35,12): error TS6133: 'error' is declared but its value is never read.
+src/pages/Welcome.tsx(2,31): error TS6133: 'Users' is declared but its value is never read.
+src/pages/Welcome.tsx(2,43): error TS6133: 'TrendingUp' is declared but its value is never read.
+src/services/api.ts(50,7): error TS7053: Element implicitly has an 'any' type because expression of type '"Authorization"' can't be used to index type 'HeadersInit'.
+  Property 'Authorization' does not exist on type 'HeadersInit'.

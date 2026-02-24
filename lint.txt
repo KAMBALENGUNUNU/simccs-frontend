@@ -1,0 +1,47 @@
+﻿
+> vite-react-typescript-starter@0.0.0 lint
+> eslint .
+
+
+C:\Users\BOND-FILS\Downloads\project\src\components\OfflineSync.tsx
+  20:26  error  'e' is defined but never used  @typescript-eslint/no-unused-vars
+
+C:\Users\BOND-FILS\Downloads\project\src\contexts\AuthContext.tsx
+  29:16  error    'error' is defined but never used                                                                                               @typescript-eslint/no-unused-vars
+  68:17  warning  Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components  react-refresh/only-export-components
+
+C:\Users\BOND-FILS\Downloads\project\src\pages\AdminPanel.tsx
+  25:6  warning  React Hook useEffect has a missing dependency: 'loadData'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\Users\BOND-FILS\Downloads\project\src\pages\Chat.tsx
+   10:11  error    'User' is defined but never used                                                                                 @typescript-eslint/no-unused-vars
+   10:17  error    'Clock' is defined but never used                                                                                @typescript-eslint/no-unused-vars
+   10:36  error    'Lock' is defined but never used                                                                                 @typescript-eslint/no-unused-vars
+   40:8   warning  React Hook useEffect has a missing dependency: 'loadChannels'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  128:17  error    'err' is defined but never used                                                                                  @typescript-eslint/no-unused-vars
+
+C:\Users\BOND-FILS\Downloads\project\src\pages\Dashboard.tsx
+  26:6  warning  React Hook useEffect has a missing dependency: 'loadReports'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\Users\BOND-FILS\Downloads\project\src\pages\FlaggedReports.tsx
+   7:44  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  26:45  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+C:\Users\BOND-FILS\Downloads\project\src\pages\ReportDetails.tsx
+  47:8  warning  React Hook useEffect has a missing dependency: 'loadReport'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\Users\BOND-FILS\Downloads\project\src\pages\Reports.tsx
+  30:6  warning  React Hook useEffect has a missing dependency: 'filterReports'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\Users\BOND-FILS\Downloads\project\src\pages\UserManagement.tsx
+  16:6  warning  React Hook useEffect has a missing dependency: 'loadUsers'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\Users\BOND-FILS\Downloads\project\src\pages\Welcome.tsx
+  2:31  error  'Users' is defined but never used       @typescript-eslint/no-unused-vars
+  2:43  error  'TrendingUp' is defined but never used  @typescript-eslint/no-unused-vars
+
+C:\Users\BOND-FILS\Downloads\project\src\services\api.ts
+  70:68  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+Ô£û 18 problems (11 errors, 7 warnings)
+

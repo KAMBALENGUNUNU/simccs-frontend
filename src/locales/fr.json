@@ -1,0 +1,74 @@
+{
+    "common": {
+        "loading": "Chargement...",
+        "save": "Enregistrer",
+        "cancel": "Annuler",
+        "delete": "Supprimer",
+        "edit": "Modifier",
+        "error": "Une erreur s'est produite"
+    },
+    "nav": {
+        "dashboard": "Tableau de Bord",
+        "reports": "Rapports",
+        "reviewQueue": "File de Révision",
+        "analytics": "Analytique",
+        "admin": "Administration",
+        "users": "Gestion des Utilisateurs",
+        "settings": "Paramètres",
+        "logout": "Déconnexion",
+        "signIn": "Se Connecter",
+        "getStarted": "Commencer"
+    },
+    "settings": {
+        "title": "Préférences Système",
+        "subtitle": "Gérez vos vecteurs de sécurité, thèmes d'interface et localisations.",
+        "security": "Configuration de Sécurité",
+        "mfa": {
+            "title": "Authentification Multifacteur (2FA)",
+            "description": "Sécurisez votre compte avec une étape de vérification supplémentaire via une application d'authentification cryptographique.",
+            "active": "Actif",
+            "enable": "Activer 2FA Maintenant",
+            "session": "Session Active",
+            "encrypted": "Crypté"
+        },
+        "theme": {
+            "title": "Thème d'Interface",
+            "light": "Tactique Clair",
+            "dark": "Opérations Sombres",
+            "system": "Synchronisation Système"
+        },
+        "language": {
+            "title": "Localisation Régionale",
+            "en": "English",
+            "enDesc": "États-Unis / Mondial",
+            "fr": "Français",
+            "frDesc": "Europe / Afrique"
+        },
+        "info": {
+            "title": "Protocole de Sécurité Bêta",
+            "desc": "Vos préférences sont actuellement synchronisées localement. Assurez-vous d'établir une MFA sur les terminaux hautement sensibles.",
+            "status": "État du Réseau",
+            "encrypted": "Crypté"
+        }
+    },
+    "welcome": {
+        "brand": "SIMCCS",
+        "title1": "Commande de Crise.",
+        "title2": "Clarté Absolue.",
+        "subtitle": "Gestion sécurisée de l'information habilitant les journalistes, éditeurs et administrateurs sur le terrain avec une intégrité en temps réel dans des environnements instables.",
+        "deploy": "Déployer Maintenant",
+        "access": "Portail d'Accès",
+        "card1": {
+            "title": "Moteur Hors-Ligne",
+            "desc": "Créez et synchronisez des rapports dans des conditions réseau instables. Le cryptage local de niveau militaire protège les données."
+        },
+        "card2": {
+            "title": "Sécurité Zero-Trust",
+            "desc": "Architecture d'entreprise avec MFA TOTP obligatoire, rotation stricte des JWT et journaux d'audit immuables."
+        },
+        "card3": {
+            "title": "Télémétrie en Temps Réel",
+            "desc": "Tableaux de bord d'intelligence en direct. Surveillez l'évolution des crises, gérez les blessés et déployez des ressources instantanément."
+        }
+    }
+}
