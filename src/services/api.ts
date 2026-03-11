@@ -12,6 +12,9 @@ import {
   AuditLog,
   SystemBackup,
   DashboardStats,
+  ReportAction,
+  AiEditorRequest,
+  AiEditorResponse
 } from '../types/api';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
@@ -37,12 +40,12 @@ class ApiClient {
 
   // Low-level fetch wrapper
   private async execute<T>(
-      endpoint: string,
-      options: RequestInit = {}
+    endpoint: string,
+    options: RequestInit = {}
   ): Promise<ResponseDTO<T>> {
-    const headers: HeadersInit = {
+    const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      ...options.headers,
+      ...((options.headers as Record<string, string>) || {}),
     };
 
     const token = this.getToken();
@@ -77,10 +80,18 @@ class ApiClient {
   // --- Auth & Core Methods ---
 
   async login(credentials: LoginRequest): Promise<ResponseDTO<JwtResponse>> {
-    return this.execute<JwtResponse>('/api/auth/login', {
+    const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
       method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(credentials),
+      credentials: 'include',
     });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw data; // Throw the whole DTO so we can access data.data for the pre-auth token
+    }
+    return data;
   }
 
   async register(data: SignupRequest): Promise<ResponseDTO<{ message: string }>> {
@@ -94,10 +105,11 @@ class ApiClient {
     return this.execute<MfaSetupResponse>('/api/auth/mfa/setup');
   }
 
-  async verifyMfa(data: MfaVerifyRequest): Promise<ResponseDTO<string>> {
-    return this.execute<string>('/api/auth/mfa/verify', {
+  async verifyMfa(data: MfaVerifyRequest): Promise<ResponseDTO<any>> {
+    return this.execute<any>('/api/auth/mfa/verify', {
       method: 'POST',
       body: JSON.stringify(data),
+      credentials: 'include',
     });
   }
 
@@ -166,12 +178,27 @@ class ApiClient {
     });
   }
 
+  async checkMisinformation(id: number): Promise<ResponseDTO<{ confidenceScore: number; reason: string }>> {
+    return this.execute<{ confidenceScore: number; reason: string }>(`/api/workflow/reports/${id}/ai-check`);
+  }
+
+  async getAiSuggestedEdits(data: AiEditorRequest): Promise<ResponseDTO<AiEditorResponse>> {
+    return this.execute<AiEditorResponse>('/api/crisis-reports/ai-edit', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
   async getFlaggedReports(): Promise<ResponseDTO<unknown>> {
     return this.execute<unknown>('/api/workflow/flagged');
   }
 
   async getReportVersions(id: number): Promise<ResponseDTO<unknown>> {
     return this.execute<unknown>(`/api/workflow/reports/${id}/versions`);
+  }
+
+  async getReportActions(id: number): Promise<ResponseDTO<ReportAction[]>> {
+    return this.execute<ReportAction[]>(`/api/workflow/reports/${id}/actions`);
   }
 
   async getDashboardStats(): Promise<ResponseDTO<DashboardStats>> {
@@ -235,7 +262,7 @@ class ApiClient {
       throw new Error('Upload failed');
     }
 
-    return response.json();
+    return response.text();
   }
 
   async syncBatch(reports: ReportRequest[]): Promise<ResponseDTO<string>> {

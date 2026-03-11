@@ -18,7 +18,17 @@ import {
     Clock,
     FileText,
     CheckCircle,
+    Brain,
+    MessageSquare,
+    Eye,
+    Globe,
+    Activity,
+    Send as SendIcon,
+    Wand2
 } from 'lucide-react';
+
+import { fetchEventSource } from '@microsoft/fetch-event-source';
+import { useRef } from 'react';
 
 interface ReportVersion {
     id: number;
@@ -26,6 +36,8 @@ interface ReportVersion {
     changeReason: string;
     createdAt: string;
 }
+
+import { ReportAction, ChatMessage, WorkflowAction, ChannelDTO, AiEditorRequest } from '../types/api';
 
 export function ReportDetails() {
     const { id } = useParams<{ id: string }>();
@@ -44,9 +56,63 @@ export function ReportDetails() {
     const [showHistory, setShowHistory] = useState(false);
     const [uploading, setUploading] = useState(false);
 
+    const [aiLoading, setAiLoading] = useState(false);
+    const [aiResult, setAiResult] = useState<{ confidenceScore: number; reason: string } | null>(null);
+    const [aiError, setAiError] = useState('');
+
+    const [actions, setActions] = useState<ReportAction[]>([]);
+    const [showAudit, setShowAudit] = useState(false);
+
+    const [aiEditorLoading, setAiEditorLoading] = useState(false);
+    const [aiEditorTone, setAiEditorTone] = useState('Professional');
+    const [aiEditorRules, setAiEditorRules] = useState('');
+
+    const [chatChannel, setChatChannel] = useState<ChannelDTO | null>(null);
+    const [messages, setMessages] = useState<ChatMessage[]>([]);
+    const [newMessage, setNewMessage] = useState('');
+    const [isChatConnected, setIsChatConnected] = useState(false);
+    const sseControllerRef = useRef<AbortController | null>(null);
+    const messagesEndRef = useRef<HTMLDivElement>(null);
+
+    const isAuthor = report?.authorId === user?.id ||
+        (user?.id && report?.authorName === user?.id.toString()) ||
+        (user?.email && report?.authorName === user.email) ||
+        (user?.email && report?.authorName?.toLowerCase() === user.email.toLowerCase()) ||
+        ((user as any)?.fullName && report?.authorName === (user as any).fullName) ||
+        ((user as any)?.username && report?.authorName === (user as any).username) ||
+        (user?.email && report?.authorName && user.email.startsWith(report.authorName));
+
+    const canUploadImage = hasRole(UserRole.EDITOR) || (hasRole(UserRole.JOURNALIST) && isAuthor && report?.status === 'DRAFT');
+
     useEffect(() => {
         loadReport();
     }, [id]);
+
+    useEffect(() => {
+        if (hasRole(UserRole.ADMIN) && id) {
+            loadAuditLog();
+        }
+    }, [id, hasRole]);
+
+    useEffect(() => {
+        if (id && !chatChannel) {
+            initChat();
+        }
+    }, [id]);
+
+    // Disconnect SSE when chat closes or unmount
+    useEffect(() => {
+        return () => {
+            if (sseControllerRef.current) {
+                sseControllerRef.current.abort();
+            }
+        };
+    }, []);
+
+    const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    useEffect(() => {
+        scrollToBottom();
+    }, [messages]);
 
     const loadReport = async () => {
         try {
@@ -80,6 +146,18 @@ export function ReportDetails() {
         }
     };
 
+    const handlePublish = async () => {
+        if (!report || !id) return;
+        try {
+            await apiClient.changeReportStatus(report.id, { action: WorkflowAction.PUBLISH, comment: "Published by admin" });
+            alert('Report successfully published.');
+            loadReport();
+            if (hasRole(UserRole.ADMIN)) loadAuditLog();
+        } catch {
+            alert('Failed to publish report.');
+        }
+    };
+
     const handleDelete = async () => {
         if (!report || !confirm('CRITICAL ACTION: Are you sure you want to completely expunge this report from the mainframe?')) return;
         try {
@@ -100,6 +178,40 @@ export function ReportDetails() {
         }
     };
 
+    const handleAiCheck = async () => {
+        if (!report) return;
+        setAiLoading(true);
+        setAiError('');
+        setAiResult(null);
+        try {
+            const response = await apiClient.checkMisinformation(report.id);
+            setAiResult(response.data);
+        } catch (err: any) {
+            setAiError(err.message || 'AI analysis failed to compute risk factor.');
+        } finally {
+            setAiLoading(false);
+        }
+    };
+
+    const handleAiEdit = async () => {
+        if (!report) return;
+        setAiEditorLoading(true);
+        try {
+            const req: AiEditorRequest = {
+                reportId: report.id,
+                tone: aiEditorTone,
+                customRules: aiEditorRules || undefined
+            };
+            const res = await apiClient.getAiSuggestedEdits(req);
+            setEditForm({ ...editForm, content: res.data.suggestedContent });
+            alert('AI Editor successfully merged suggestions into your draft. Please review and optionally tweak before committing.');
+        } catch (err: any) {
+            alert(err.message || 'AI Editor failed to generate suggestions.');
+        } finally {
+            setAiEditorLoading(false);
+        }
+    };
+
     const loadVersions = async () => {
         if (!report) return;
         try {
@@ -108,6 +220,91 @@ export function ReportDetails() {
             setShowHistory(!showHistory);
         } catch {
             alert('Failed to extract version history.');
+        }
+    };
+
+    const loadAuditLog = async () => {
+        if (!id) return;
+        try {
+            const response = await apiClient.getReportActions(parseInt(id));
+            setActions(response.data);
+        } catch {
+            console.error('Failed to load audit history');
+        }
+    };
+
+    const initChat = async () => {
+        if (!id) return;
+        try {
+            // First pass: retrieve channel info and history
+            const res = await apiClient.request<ChannelDTO>('GET', `/api/chat/reports/${id}/channel`);
+            const channel = res.data;
+            setChatChannel(channel);
+
+            const histRes = await apiClient.request<ChatMessage[]>('GET', `/api/chat/channels/${channel.id}/history`);
+            setMessages(histRes.data);
+
+            // Close existing SSE stream before starting a new one
+            if (sseControllerRef.current) {
+                sseControllerRef.current.abort();
+            }
+            const ctrl = new AbortController();
+            sseControllerRef.current = ctrl;
+
+            fetchEventSource(`http://localhost:8080/api/chat/channels/${channel.id}/stream`, {
+                method: 'GET',
+                signal: ctrl.signal,
+                headers: {
+                    Authorization: `Bearer ${localStorage.getItem('token')}`,
+                },
+                onopen: async (response) => {
+                    if (response.ok) {
+                        setIsChatConnected(true);
+                        return; // valid SSE stream open
+                    } else {
+                        setIsChatConnected(false);
+                        throw new Error(`Connection failed: ${response.status}`);
+                    }
+                },
+                onmessage(ev) {
+                    try {
+                        const parsedData: any = JSON.parse(ev.data);
+                        if (parsedData.type === 'INIT' || !parsedData.senderName) return;
+                        setMessages((prev) => [...prev, parsedData as ChatMessage]);
+                    } catch (e) {
+                        console.error('Failed to parse incoming SSE message', e);
+                    }
+                },
+                onclose() {
+                    setIsChatConnected(false);
+                },
+                onerror(err) {
+                    console.error('SSE Stream Error: ', err);
+                    setIsChatConnected(false);
+                }
+            });
+        } catch (err) {
+            console.error('Failed to initialize dedicated report chat stream', err);
+            setIsChatConnected(false);
+        }
+    };
+
+    const handleSendChatMessage = async () => {
+        if (!newMessage.trim() || !chatChannel || !user?.email) return;
+
+        const payload = {
+            content: newMessage,
+        };
+
+        // Instantly clear the text box for perceived responsiveness
+        setNewMessage('');
+
+        try {
+            await apiClient.request('POST', `/api/chat/channels/${chatChannel.id}/messages`, payload);
+            // We do NOT manually push into messages array: SSE will broadcast it down to us natively.
+        } catch (error) {
+            console.error('Failed to dispatch message over REST:', error);
+            alert('Failed to send message.');
         }
     };
 
@@ -122,7 +319,7 @@ export function ReportDetails() {
                 ...editForm,
                 latitude: report.latitude,
                 longitude: report.longitude,
-                mediaFiles: [fileName]
+                mediaFiles: [...(report.mediaFiles || []), fileName]
             });
             alert('Asset linked successfully: ' + fileName);
         } catch {
@@ -163,26 +360,11 @@ export function ReportDetails() {
         );
     }
 
-    if (!report && !loading) {
-        return (
-            <Layout>
-                <div className="p-20 text-center animate-fade-in">
-                    <div className="w-20 h-20 bg-slate-50 dark:bg-slate-800/50 rounded-2xl flex items-center justify-center mx-auto mb-6 ring-1 ring-slate-200 dark:ring-slate-700 shadow-inner transition-colors">
-                        <FileText className="w-10 h-10 text-slate-400 dark:text-slate-500" />
-                    </div>
-                    <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2 transition-colors">Classified or Expunged Data</h3>
-                    <p className="text-slate-500 dark:text-slate-400 font-medium transition-colors">The requested intelligence brief could not be located on the current server hierarchy.</p>
-                    <button onClick={() => navigate(-1)} className="mt-8 px-6 py-3 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 font-bold rounded-xl hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors">
-                        Return to Dashboard
-                    </button>
-                </div>
-            </Layout>
-        );
-    }
+    // Early return removed to preserve Chat Sidebar
 
     return (
         <Layout>
-            <div className="max-w-5xl mx-auto space-y-6 animate-fade-in pb-12">
+            <div className="max-w-[100rem] mx-auto space-y-6 animate-fade-in pb-12 px-4 sm:px-6">
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 py-2">
                     <button onClick={() => navigate(-1)} className="group flex items-center space-x-2 text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors font-bold text-sm bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm px-4 py-2 rounded-xl ring-1 ring-slate-200/60 dark:ring-slate-800/60 shadow-sm">
                         <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
@@ -190,11 +372,27 @@ export function ReportDetails() {
                     </button>
                     {!isEditing && (
                         <div className="flex flex-wrap items-center gap-2">
-                            {(hasRole(UserRole.EDITOR) || user?.id.toString() === report?.authorName) && (
-                                <button onClick={() => setIsEditing(true)} className="flex items-center px-4 py-2 bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-slate-700 font-bold text-sm rounded-xl shadow-sm ring-1 ring-slate-200/60 dark:ring-slate-700/60 transition-all hover:ring-indigo-200 dark:hover:ring-slate-600 hover:shadow-md">
-                                    <Edit2 className="w-4 h-4 mr-2" /> Modify Record
+                            {hasRole(UserRole.ADMIN) && report?.status !== 'PUBLISHED' && (
+                                <button onClick={handlePublish} className="flex items-center px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-white hover:from-emerald-600 hover:to-teal-600 font-bold text-sm rounded-xl shadow-sm ring-1 ring-emerald-500/50 transition-all hover:shadow-lg hover:shadow-emerald-500/25">
+                                    <Globe className="w-4 h-4 mr-2" /> Publish Report
                                 </button>
                             )}
+                            {(hasRole(UserRole.ADMIN) || hasRole(UserRole.EDITOR)) && (
+                                <button onClick={handleAiCheck} disabled={aiLoading} className="flex items-center px-4 py-2 bg-gradient-to-r from-purple-500 to-indigo-500 text-white hover:from-purple-600 hover:to-indigo-600 font-bold text-sm rounded-xl shadow-sm ring-1 ring-purple-500/50 transition-all hover:shadow-lg hover:shadow-purple-500/25 disabled:opacity-50 disabled:cursor-not-allowed">
+                                    {aiLoading ? (
+                                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
+                                    ) : (
+                                        <Brain className="w-4 h-4 mr-2" />
+                                    )}
+                                    {aiLoading ? 'Analyzing...' : 'Analyze with AI'}
+                                </button>
+                            )}
+                            {((hasRole(UserRole.EDITOR) && (report?.status === 'SUBMITTED' || report?.status === 'VERIFIED')) ||
+                                (hasRole(UserRole.JOURNALIST) && isAuthor && (report?.status === 'DRAFT' || report?.status === 'REVISION_REQUESTED'))) && (
+                                    <button onClick={() => setIsEditing(true)} className="flex items-center px-4 py-2 bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-slate-700 font-bold text-sm rounded-xl shadow-sm ring-1 ring-slate-200/60 dark:ring-slate-700/60 transition-all hover:ring-indigo-200 dark:hover:ring-slate-600 hover:shadow-md">
+                                        <Edit2 className="w-4 h-4 mr-2" /> Modify Record
+                                    </button>
+                                )}
                             <button onClick={handleFlag} className="flex items-center px-4 py-2 bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/50 font-bold text-sm rounded-xl shadow-sm ring-1 ring-amber-500/20 dark:ring-amber-500/30 transition-all hover:shadow-md">
                                 <Flag className="w-4 h-4 mr-2" /> Flag Asset
                             </button>
@@ -253,6 +451,53 @@ export function ReportDetails() {
                                         className="w-full p-5 border border-slate-200 dark:border-slate-700/60 rounded-2xl bg-slate-50/50 dark:bg-slate-800/50 focus:bg-white dark:focus:bg-slate-800 focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 dark:focus:border-indigo-500 transition-all text-slate-800 dark:text-slate-300 leading-relaxed font-serif"
                                     />
                                 </div>
+
+                                {/* AI Editor Integration Panel */}
+                                <div className="p-5 bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-900/10 dark:to-purple-900/10 border border-indigo-100 dark:border-indigo-800/40 rounded-2xl mt-6 shadow-sm">
+                                    <h3 className="text-sm font-bold text-indigo-900 dark:text-indigo-300 flex items-center gap-2 mb-3">
+                                        <Wand2 className="w-5 h-5 text-indigo-500 dark:text-indigo-400" />
+                                        AI Magic Edit
+                                    </h3>
+                                    <p className="text-xs text-indigo-700/80 dark:text-indigo-400/80 mb-5 font-medium leading-relaxed">
+                                        Use AI to intelligently rewrite the drafted payload. It will automatically consult the team's discussion thread and apply your specific instructions.
+                                    </p>
+                                    <div className="flex flex-col sm:flex-row gap-4 mb-5">
+                                        <div className="flex-1">
+                                            <label className="block text-[10px] font-bold text-indigo-800/70 dark:text-indigo-300/70 uppercase tracking-widest mb-2">Desired Tone</label>
+                                            <select
+                                                value={aiEditorTone}
+                                                onChange={e => setAiEditorTone(e.target.value)}
+                                                className="w-full bg-white dark:bg-slate-900/50 border border-indigo-200 dark:border-indigo-700/50 text-sm font-medium rounded-xl px-4 py-2.5 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all">
+                                                <option value="Professional">Professional</option>
+                                                <option value="Journalistic">Journalistic</option>
+                                                <option value="Urgent">Urgent / Crisis</option>
+                                                <option value="Concise">Concise / Bullet points</option>
+                                            </select>
+                                        </div>
+                                        <div className="flex-[2]">
+                                            <label className="block text-[10px] font-bold text-indigo-800/70 dark:text-indigo-300/70 uppercase tracking-widest mb-2">Custom Directives (Optional)</label>
+                                            <input
+                                                type="text"
+                                                value={aiEditorRules}
+                                                onChange={e => setAiEditorRules(e.target.value)}
+                                                placeholder="e.g. 'Remove all mentions of specific names', 'Limit to 3 paragraphs'"
+                                                className="w-full bg-white dark:bg-slate-900/50 border border-indigo-200 dark:border-indigo-700/50 text-sm font-medium rounded-xl px-4 py-2.5 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 placeholder:text-slate-400 dark:placeholder:text-slate-500 transition-all"
+                                            />
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={handleAiEdit}
+                                        disabled={aiEditorLoading}
+                                        className="w-full sm:w-auto px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm rounded-xl shadow-md shadow-indigo-500/20 transition-all flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed">
+                                        {aiEditorLoading ? (
+                                            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
+                                        ) : (
+                                            <Wand2 className="w-4 h-4 mr-2" />
+                                        )}
+                                        {aiEditorLoading ? 'Synthesizing...' : 'Generate Edits'}
+                                    </button>
+                                </div>
+
                                 <div className="flex justify-end space-x-3 pt-6 border-t border-slate-100 dark:border-slate-800 transition-colors">
                                     <button onClick={() => setIsEditing(false)} className="px-5 py-2.5 text-slate-600 dark:text-slate-400 font-bold hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors">Abort Changes</button>
                                     <button onClick={handleUpdate} className="flex items-center px-6 py-2.5 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 hover:shadow-lg hover:shadow-indigo-500/25 transition-all">
@@ -262,142 +507,333 @@ export function ReportDetails() {
                             </div>
                         </div>
                     ) : (
-                        report && (
-                            <div className="flex flex-col lg:flex-row">
-                                <div className="flex-1 p-8 lg:p-12 lg:pr-8">
-                                    <div className="mb-8">
-                                        <div className="flex flex-wrap items-center gap-3 mb-6">
-                                            <span className={getStatusBadge(report.status)}>
-                                                {report.status.replace('_', ' ')}
-                                            </span>
-                                            <span className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-bold px-3 py-1 rounded-xl text-xs uppercase tracking-wider transition-colors">
-                                                ID: {report.id}
-                                            </span>
-                                        </div>
-                                        <h1 className="text-4xl md:text-5xl font-black text-slate-900 dark:text-white mb-6 leading-tight tracking-tight transition-colors">
-                                            {report.title}
-                                        </h1>
+                        <div className="flex flex-col xl:flex-row xl:items-start relative">
+                            {/* Main Content Area (Left Column) */}
+                            <div className="flex-1 p-6 sm:p-8 lg:p-12 w-full min-w-0">
+                                {report ? (
+                                    <>
+                                        <div className="mb-8">
+                                            <div className="flex flex-wrap items-center gap-3 mb-6">
+                                                <span className={getStatusBadge(report.status)}>
+                                                    {report.status.replace('_', ' ')}
+                                                </span>
+                                                <span className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-bold px-3 py-1 rounded-xl text-xs uppercase tracking-wider transition-colors shadow-sm">
+                                                    ID: {report.id}
+                                                </span>
+                                            </div>
+                                            <h1 className="text-4xl md:text-5xl font-black text-slate-900 dark:text-white mb-6 leading-tight tracking-tight transition-colors">
+                                                {report.title}
+                                            </h1>
 
-                                        <div className="flex flex-wrap items-center gap-x-8 gap-y-4 pt-6 border-t border-slate-100 dark:border-slate-800 transition-colors">
-                                            <div>
-                                                <p className="text-[10px] uppercase tracking-widest font-bold text-slate-400 dark:text-slate-500 mb-1 transition-colors">Author</p>
-                                                <p className="text-sm font-bold text-slate-700 dark:text-slate-300 flex items-center transition-colors">
-                                                    <FileText className="w-4 h-4 mr-1.5 text-indigo-400" />
-                                                    {report.authorName}
-                                                </p>
+                                            {/* Sleek Metadata Presentation */}
+                                            <div className="flex flex-wrap items-center gap-4 pt-4 mt-2 border-t border-slate-100/50 dark:border-slate-800/50 transition-colors">
+                                                <div className="group flex items-center px-4 py-2.5 bg-white/50 dark:bg-slate-800/50 backdrop-blur-md rounded-2xl ring-1 ring-slate-200/50 dark:ring-slate-700/50 shadow-sm hover:shadow-md hover:ring-indigo-500/30 hover:-translate-y-0.5 transition-all duration-300 ease-[cubic-bezier(0.25,1,0.5,1)]">
+                                                    <FileText className="w-4 h-4 mr-2.5 text-indigo-500 dark:text-indigo-400 group-hover:scale-110 transition-transform" />
+                                                    <div>
+                                                        <p className="text-[9px] uppercase tracking-widest font-black text-slate-400 dark:text-slate-500 mb-0.5 transition-colors">Author</p>
+                                                        <p className="text-sm font-bold text-slate-700 dark:text-slate-300 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">{report.authorName}</p>
+                                                    </div>
+                                                </div>
+                                                <div className="group flex items-center px-4 py-2.5 bg-white/50 dark:bg-slate-800/50 backdrop-blur-md rounded-2xl ring-1 ring-slate-200/50 dark:ring-slate-700/50 shadow-sm hover:shadow-md hover:ring-emerald-500/30 hover:-translate-y-0.5 transition-all duration-300 ease-[cubic-bezier(0.25,1,0.5,1)]">
+                                                    <MapPin className="w-4 h-4 mr-2.5 text-emerald-500 dark:text-emerald-400 group-hover:scale-110 transition-transform" />
+                                                    <div>
+                                                        <p className="text-[9px] uppercase tracking-widest font-black text-slate-400 dark:text-slate-500 mb-0.5 transition-colors">{report.locationName ? 'Detected Locale' : 'Location'}</p>
+                                                        <p className="text-sm font-bold text-slate-700 dark:text-slate-300 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">{report.locationName || 'Location Unknown'}</p>
+                                                    </div>
+                                                </div>
+                                                <div className="group flex items-center px-4 py-2.5 bg-white/50 dark:bg-slate-800/50 backdrop-blur-md rounded-2xl ring-1 ring-slate-200/50 dark:ring-slate-700/50 shadow-sm hover:shadow-md hover:ring-blue-500/30 hover:-translate-y-0.5 transition-all duration-300 ease-[cubic-bezier(0.25,1,0.5,1)]">
+                                                    <Calendar className="w-4 h-4 mr-2.5 text-blue-500 dark:text-blue-400 group-hover:scale-110 transition-transform" />
+                                                    <div>
+                                                        <p className="text-[9px] uppercase tracking-widest font-black text-slate-400 dark:text-slate-500 mb-0.5 transition-colors">Timestamp</p>
+                                                        <p className="text-sm font-bold text-slate-700 dark:text-slate-300 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">{new Date(report.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                                                    </div>
+                                                </div>
+                                                {report.casualtyCount !== undefined && report.casualtyCount > 0 && (
+                                                    <div className="group flex items-center px-4 py-2.5 bg-rose-50/50 dark:bg-rose-900/30 backdrop-blur-md rounded-2xl ring-1 ring-rose-500/20 dark:ring-rose-500/30 shadow-sm hover:shadow-md hover:ring-rose-500/40 hover:-translate-y-0.5 transition-all duration-300 ease-[cubic-bezier(0.25,1,0.5,1)]">
+                                                        <AlertTriangle className="w-4 h-4 mr-2.5 text-rose-500 dark:text-rose-400 group-hover:scale-110 transition-transform" />
+                                                        <div>
+                                                            <p className="text-[9px] uppercase tracking-widest font-black text-rose-400 dark:text-rose-500 mb-0.5 transition-colors">Casualties</p>
+                                                            <p className="text-sm font-bold text-rose-700 dark:text-rose-400 group-hover:text-rose-600 dark:group-hover:text-rose-300 transition-colors">{report.casualtyCount} Recorded</p>
+                                                        </div>
+                                                    </div>
+                                                )}
                                             </div>
-                                            <div>
-                                                <p className="text-[10px] uppercase tracking-widest font-bold text-slate-400 dark:text-slate-500 mb-1 transition-colors">Coordinates</p>
-                                                <p className="text-sm font-bold text-slate-700 dark:text-slate-300 flex items-center transition-colors">
-                                                    <MapPin className="w-4 h-4 mr-1.5 text-emerald-500 dark:text-emerald-400" />
-                                                    {report.latitude}, {report.longitude}
-                                                </p>
+                                        </div>
+
+                                        <div className="space-y-8 mt-10">
+                                            <div className="p-6 bg-indigo-50/50 dark:bg-indigo-900/20 rounded-2xl border border-indigo-100/50 dark:border-indigo-500/20 shadow-sm relative overflow-hidden transition-colors">
+                                                <div className="absolute top-0 left-0 w-1 h-full bg-indigo-500"></div>
+                                                <h3 className="text-xs font-bold uppercase tracking-widest text-indigo-500 dark:text-indigo-400 mb-2 transition-colors">Executive Overview</h3>
+                                                <p className="text-lg text-indigo-900 dark:text-indigo-300 font-medium leading-relaxed transition-colors">{report.summary}</p>
                                             </div>
+
                                             <div>
-                                                <p className="text-[10px] uppercase tracking-widest font-bold text-slate-400 dark:text-slate-500 mb-1 transition-colors">Timestamp</p>
-                                                <p className="text-sm font-bold text-slate-700 dark:text-slate-300 flex items-center transition-colors">
-                                                    <Calendar className="w-4 h-4 mr-1.5 text-blue-500 dark:text-blue-400" />
-                                                    {new Date(report.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}
-                                                </p>
+                                                <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-4 pb-2 border-b border-slate-100 dark:border-slate-800 transition-colors">Full Decrypted Transmission</h3>
+                                                <div className="prose prose-slate dark:prose-invert max-w-none transition-colors">
+                                                    <p className="whitespace-pre-wrap text-slate-800 dark:text-slate-300 leading-relaxed font-serif text-lg transition-colors">{report.content}</p>
+                                                </div>
                                             </div>
-                                            {report.casualtyCount !== undefined && report.casualtyCount > 0 && (
-                                                <div>
-                                                    <p className="text-[10px] uppercase tracking-widest font-bold text-rose-400 dark:text-rose-500 mb-1 transition-colors">Casualties</p>
-                                                    <p className="text-sm font-bold text-rose-700 dark:text-rose-400 flex items-center bg-rose-50 dark:bg-rose-900/30 px-2.5 py-1 rounded-lg ring-1 ring-rose-500/20 dark:ring-rose-500/30 transition-colors">
-                                                        <AlertTriangle className="w-4 h-4 mr-1.5 text-rose-500 dark:text-rose-400" />
-                                                        {report.casualtyCount} Recorded
-                                                    </p>
+
+                                            {report.mediaFiles && report.mediaFiles.length > 0 && (
+                                                <div className="pt-6 border-t border-slate-100 dark:border-slate-800 transition-colors">
+                                                    <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-4 pb-2 border-b border-slate-100 dark:border-slate-800 transition-colors">Attached Intelligence Assets</h3>
+                                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                                        {report.mediaFiles.map((filename, idx) => (
+                                                            <div key={idx} className="group relative rounded-2xl overflow-hidden bg-slate-100 dark:bg-slate-800 ring-1 ring-slate-200 dark:ring-slate-700 transition-all hover:ring-indigo-500/50 hover:shadow-lg">
+                                                                <img
+                                                                    src={filename}
+                                                                    alt={`Asset ${idx + 1}`}
+                                                                    className="w-full h-auto object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+                                                                />
+                                                                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                                                                <div className="absolute bottom-3 left-3 right-3 flex justify-between items-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                                                                    <span className="text-xs font-bold text-white uppercase tracking-wider truncate mr-2">Asset {idx + 1}</span>
+                                                                    <a href={filename} target="_blank" rel="noreferrer" className="w-8 h-8 bg-white/20 backdrop-blur-sm rounded-lg flex items-center justify-center text-white hover:bg-white/40 hover:scale-110 active:scale-95 transition-all shrink-0">
+                                                                        <Eye className="w-4 h-4" />
+                                                                    </a>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {aiError && (
+                                                <div className="p-4 bg-rose-50 dark:bg-rose-900/30 border border-rose-200 dark:border-rose-800/50 rounded-2xl flex items-start space-x-3 shadow-sm transition-colors animate-fade-in group">
+                                                    <AlertTriangle className="w-5 h-5 text-rose-600 dark:text-rose-400 flex-shrink-0 mt-0.5 group-hover:scale-110 transition-transform" />
+                                                    <p className="text-sm font-medium text-rose-800 dark:text-rose-300 transition-colors">{aiError}</p>
+                                                </div>
+                                            )}
+
+                                            {aiResult && (
+                                                <div className="p-6 bg-white dark:bg-slate-800 rounded-3xl border border-slate-200/60 dark:border-slate-700/60 shadow-lg relative overflow-hidden animate-fade-in transition-all duration-300 hover:shadow-xl group hover:-translate-y-1">
+                                                    <div className={`absolute top-0 right-0 w-32 h-32 rounded-bl-full -z-10 opacity-20 transition-colors ${aiResult.confidenceScore > 0.65 ? 'bg-rose-500' : 'bg-emerald-500'
+                                                        }`}></div>
+                                                    <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6">
+                                                        <div className="relative w-24 h-24 flex-shrink-0 group-hover:scale-105 transition-transform duration-300">
+                                                            <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                                                                <circle cx="50" cy="50" r="42" className="stroke-slate-100 dark:stroke-slate-700 fill-none transition-colors" strokeWidth="8" />
+                                                                <circle
+                                                                    cx="50" cy="50" r="42"
+                                                                    className={`fill-none transition-all duration-1000 ease-out ${aiResult.confidenceScore > 0.65 ? 'stroke-rose-500' : 'stroke-emerald-500'
+                                                                        }`}
+                                                                    strokeWidth="8"
+                                                                    strokeDasharray={`${2 * Math.PI * 42}`}
+                                                                    strokeDashoffset={`${2 * Math.PI * 42 * (1 - aiResult.confidenceScore)}`}
+                                                                />
+                                                            </svg>
+                                                            <div className="absolute inset-0 flex flex-col items-center justify-center">
+                                                                <span className={`text-xl font-black transition-colors ${aiResult.confidenceScore > 0.65 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'
+                                                                    }`}>{Math.round(aiResult.confidenceScore * 100)}%</span>
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex-1 text-center sm:text-left">
+                                                            <h3 className="text-sm font-black uppercase tracking-widest text-slate-800 dark:text-slate-200 mb-3 flex items-center justify-center sm:justify-start gap-2 transition-colors">
+                                                                <Brain className="w-5 h-5 text-indigo-500" /> AI Misinformation Analysis
+                                                            </h3>
+                                                            <div className="relative text-left">
+                                                                <div className="absolute -left-3 sm:-left-4 top-0 bottom-0 w-1 bg-gradient-to-b from-indigo-500 to-purple-500 rounded-full hidden sm:block"></div>
+                                                                <p className="text-slate-600 dark:text-slate-400 text-sm leading-relaxed sm:pl-2 font-medium italic transition-colors">
+                                                                    "{aiResult.reason}"
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {report.categories && report.categories.length > 0 && (
+                                                <div className="pt-6 border-t border-slate-100 dark:border-slate-800 transition-colors">
+                                                    <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-3 transition-colors">Assigned Classifications</h3>
+                                                    <div className="flex flex-wrap gap-2">
+                                                        {report.categories.map((category, idx) => (
+                                                            <span key={idx} className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-bold shadow-sm uppercase tracking-wide transition-colors hover:shadow-md hover:-translate-y-0.5 cursor-default hover:text-indigo-600 dark:hover:text-indigo-400">
+                                                                {category}
+                                                            </span>
+                                                        ))}
+                                                    </div>
                                                 </div>
                                             )}
                                         </div>
-                                    </div>
 
-                                    <div className="space-y-8 mt-10">
-                                        <div className="p-6 bg-indigo-50/50 dark:bg-indigo-900/20 rounded-2xl border border-indigo-100/50 dark:border-indigo-500/20 shadow-sm relative overflow-hidden transition-colors">
-                                            <div className="absolute top-0 left-0 w-1 h-full bg-indigo-500"></div>
-                                            <h3 className="text-xs font-bold uppercase tracking-widest text-indigo-500 dark:text-indigo-400 mb-2 transition-colors">Executive Overview</h3>
-                                            <p className="text-lg text-indigo-900 dark:text-indigo-300 font-medium leading-relaxed transition-colors">{report.summary}</p>
-                                        </div>
-
-                                        <div>
-                                            <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-4 pb-2 border-b border-slate-100 dark:border-slate-800 transition-colors">Full Decrypted Transmission</h3>
-                                            <div className="prose prose-slate dark:prose-invert max-w-none transition-colors">
-                                                <p className="whitespace-pre-wrap text-slate-800 dark:text-slate-300 leading-relaxed font-serif text-lg transition-colors">{report.content}</p>
-                                            </div>
-                                        </div>
-
-                                        {report.categories && report.categories.length > 0 && (
-                                            <div className="pt-6 border-t border-slate-100 dark:border-slate-800 transition-colors">
-                                                <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-3 transition-colors">Assigned Classifications</h3>
-                                                <div className="flex flex-wrap gap-2">
-                                                    {report.categories.map((category, idx) => (
-                                                        <span key={idx} className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-bold shadow-sm uppercase tracking-wide transition-colors">
-                                                            {category}
-                                                        </span>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-
-                                {/* Right Sidebar */}
-                                <div className="w-full lg:w-80 border-t lg:border-t-0 lg:border-l border-slate-200/60 dark:border-slate-800/60 bg-slate-50/30 dark:bg-slate-900/30 p-8 flex flex-col gap-8 transition-colors">
-                                    <div className="bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-sm ring-1 ring-slate-200/50 dark:ring-slate-700/50 transition-colors">
-                                        <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 mb-4 flex items-center transition-colors">
-                                            <Upload className="w-4 h-4 mr-2" /> Asset Attachment
-                                        </h3>
-                                        <div className="flex flex-col gap-3">
-                                            <label className="flex items-center justify-center w-full h-24 px-4 transition bg-slate-50 dark:bg-slate-900/50 border-2 border-slate-300 dark:border-slate-700 border-dashed rounded-xl appearance-none cursor-pointer hover:border-indigo-400 dark:hover:border-indigo-500 focus:outline-none group">
-                                                <div className="flex flex-col items-center space-y-2">
-                                                    {uploading ? (
-                                                        <div className="w-5 h-5 border-2 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
-                                                    ) : (
-                                                        <Upload className="w-6 h-6 text-slate-400 dark:text-slate-500 group-hover:text-indigo-500 dark:group-hover:text-indigo-400 transition-colors" />
-                                                    )}
-                                                    <span className="font-medium text-xs text-slate-500 dark:text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
-                                                        {uploading ? 'Transmitting...' : 'Drop files to attach'}
-                                                    </span>
-                                                </div>
-                                                <input type="file" name="file_upload" className="hidden" onChange={handleFileUpload} disabled={uploading} />
-                                            </label>
-                                        </div>
-                                    </div>
-
-                                    <div className="bg-white dark:bg-slate-800 rounded-2xl p-5 shadow-sm ring-1 ring-slate-200/50 dark:ring-slate-700/50 flex-1 transition-colors">
-                                        <button onClick={loadVersions} className="flex items-center justify-between w-full text-left group mb-4">
-                                            <span className="text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 flex items-center transition-colors">
-                                                <History className="w-4 h-4 mr-2" />
-                                                Version Control
-                                            </span>
-                                            <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded-lg group-hover:bg-indigo-50 dark:group-hover:bg-indigo-900/50 group-hover:text-indigo-500 dark:group-hover:text-indigo-300 transition-colors">Toggle</span>
-                                        </button>
-
-                                        {showHistory && (
-                                            <div className="space-y-3 mt-4 animate-fade-in relative z-10 before:absolute before:inset-0 before:ml-[11px] before:-z-10 before:w-0.5 before:bg-slate-200 dark:before:bg-slate-700">
-                                                {versions.map((v, i) => (
-                                                    <div key={v.id} className="relative pl-8">
-                                                        <div className={`absolute left-0 top-1.5 w-6 h-6 rounded-full flex items-center justify-center shrink-0 ring-4 ring-white dark:ring-slate-800 ${i === 0 ? 'bg-indigo-500 text-white' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400'}`}>
-                                                            {i === 0 ? <CheckCircle className="w-3.5 h-3.5" /> : <Clock className="w-3.5 h-3.5" />}
-                                                        </div>
-                                                        <div className={`bg-white dark:bg-slate-900 p-3 rounded-xl border ${i === 0 ? 'border-indigo-200 dark:border-indigo-500/50 shadow-sm' : 'border-slate-200 dark:border-slate-700'} transition-colors`}>
-                                                            <div className="flex justify-between items-center mb-1">
-                                                                <span className={`text-xs font-bold ${i === 0 ? 'text-indigo-700 dark:text-indigo-400' : 'text-slate-700 dark:text-slate-300'}`}>v{v.versionNumber}</span>
-                                                                <span className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500">{new Date(v.createdAt).toLocaleDateString()}</span>
+                                        {/* Utility Panels Integration */}
+                                        <div className="mt-12 pt-8 border-t border-slate-200/60 dark:border-slate-800/60 transition-colors">
+                                            <h3 className="text-sm font-black uppercase tracking-widest text-slate-800 dark:text-slate-200 mb-6 flex items-center gap-2 transition-colors">
+                                                <Activity className="w-5 h-5 text-indigo-500" /> Operations & Utilities
+                                            </h3>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                                {canUploadImage && (
+                                                    <div className="bg-slate-50/50 dark:bg-slate-800/50 backdrop-blur-sm shadow-sm hover:shadow-md ring-1 ring-slate-200/60 dark:ring-slate-700/60 hover:ring-indigo-500/30 rounded-3xl p-6 transition-all duration-300">
+                                                        <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 mb-4 flex items-center transition-colors">
+                                                            <Upload className="w-4 h-4 mr-2" /> Asset Attachment
+                                                        </h3>
+                                                        <label className="flex items-center justify-center w-full h-24 px-4 transition bg-white dark:bg-slate-900 border-2 border-slate-300 dark:border-slate-700 border-dashed rounded-2xl appearance-none cursor-pointer hover:border-indigo-400 dark:hover:border-indigo-500 focus:outline-none group">
+                                                            <div className="flex flex-col items-center space-y-2">
+                                                                {uploading ? (
+                                                                    <div className="w-5 h-5 border-2 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
+                                                                ) : (
+                                                                    <Upload className="w-6 h-6 text-slate-400 dark:text-slate-500 group-hover:text-indigo-500 dark:group-hover:text-indigo-400 group-hover:scale-110 transition-all" />
+                                                                )}
+                                                                <span className="font-medium text-xs text-slate-500 dark:text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                                                                    {uploading ? 'Transmitting...' : 'Drop files to attach'}
+                                                                </span>
                                                             </div>
-                                                            <p className="text-xs text-slate-600 dark:text-slate-400 font-medium leading-relaxed transition-colors">{v.changeReason}</p>
+                                                            <input type="file" name="file_upload" className="hidden" onChange={handleFileUpload} disabled={uploading} />
+                                                        </label>
+                                                    </div>
+                                                )}
+
+                                                {hasRole(UserRole.ADMIN) && (
+                                                    <div className="bg-slate-50/50 dark:bg-slate-800/50 backdrop-blur-sm shadow-sm hover:shadow-md ring-1 ring-slate-200/60 dark:ring-slate-700/60 hover:ring-amber-500/30 rounded-3xl p-6 transition-all duration-300 flex flex-col">
+                                                        <button onClick={() => setShowAudit(!showAudit)} className="flex items-center justify-between w-full text-left group">
+                                                            <span className="text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 group-hover:text-amber-600 dark:group-hover:text-amber-400 flex items-center transition-colors">
+                                                                <History className="w-4 h-4 mr-2 group-hover:rotate-12 transition-transform" />
+                                                                Audit History
+                                                            </span>
+                                                            <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 bg-white dark:bg-slate-700 px-2.5 py-1 rounded-xl group-hover:bg-amber-50 dark:group-hover:bg-amber-900/50 group-hover:text-amber-600 dark:group-hover:text-amber-300 shadow-sm transition-all">{showAudit ? 'Hide' : 'Reveal'}</span>
+                                                        </button>
+
+                                                        {showAudit && (
+                                                            <div className="space-y-4 mt-6 animate-fade-in relative z-10 before:absolute before:inset-0 before:ml-[11px] before:-z-10 before:w-0.5 before:bg-slate-200 dark:before:bg-slate-700 flex-1 overflow-y-auto max-h-[300px] pr-2 custom-scrollbar">
+                                                                {actions.map((act) => (
+                                                                    <div key={act.id} className="relative pl-8 group/item hover:-translate-y-0.5 transition-transform">
+                                                                        <div className="absolute left-0 top-1.5 w-6 h-6 rounded-full flex items-center justify-center shrink-0 ring-4 ring-white dark:ring-slate-800 bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400 group-hover/item:text-amber-500 transition-colors">
+                                                                            <Eye className="w-3.5 h-3.5" />
+                                                                        </div>
+                                                                        <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm group-hover/item:shadow-md group-hover/item:border-amber-200 dark:group-hover/item:border-amber-900/50 transition-all">
+                                                                            <div className="flex justify-between items-center mb-1.5">
+                                                                                <span className="text-xs font-bold text-slate-800 dark:text-slate-200">{act.action}</span>
+                                                                                <span className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500">{new Date(act.createdAt).toLocaleDateString()}</span>
+                                                                            </div>
+                                                                            <p className="text-xs text-slate-600 dark:text-slate-400 font-medium leading-relaxed mb-2 transition-colors">By {act.actorName}</p>
+                                                                            {act.comment && <p className="text-[11px] text-slate-500 dark:text-slate-500 italic bg-amber-50/50 dark:bg-slate-800 p-2.5 rounded-xl border border-slate-100 dark:border-slate-700/50 leading-relaxed font-medium">"{act.comment}"</p>}
+                                                                        </div>
+                                                                    </div>
+                                                                ))}
+                                                                {actions.length === 0 && (
+                                                                    <div className="pl-6 text-sm font-medium text-slate-500 dark:text-slate-400 italic">No audit actions found.</div>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
+
+                                                <div className="bg-slate-50/50 dark:bg-slate-800/50 backdrop-blur-sm shadow-sm hover:shadow-md ring-1 ring-slate-200/60 dark:ring-slate-700/60 hover:ring-indigo-500/30 rounded-3xl p-6 transition-all duration-300 flex flex-col">
+                                                    <button onClick={loadVersions} className="flex items-center justify-between w-full text-left group">
+                                                        <span className="text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 flex items-center transition-colors">
+                                                            <History className="w-4 h-4 mr-2 group-hover:-rotate-45 transition-transform" />
+                                                            Version Control
+                                                        </span>
+                                                        <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 bg-white dark:bg-slate-700 px-2.5 py-1 rounded-xl group-hover:bg-indigo-50 dark:group-hover:bg-indigo-900/50 group-hover:text-indigo-600 dark:group-hover:text-indigo-300 shadow-sm transition-all">{showHistory ? 'Hide' : 'Reveal'}</span>
+                                                    </button>
+
+                                                    {showHistory && (
+                                                        <div className="space-y-4 mt-6 animate-fade-in relative z-10 before:absolute before:inset-0 before:ml-[11px] before:-z-10 before:w-0.5 before:bg-slate-200 dark:before:bg-slate-700 flex-1 overflow-y-auto max-h-[300px] pr-2 custom-scrollbar">
+                                                            {versions.map((v, i) => (
+                                                                <div key={v.id} className="relative pl-8 group/item hover:-translate-y-0.5 transition-transform">
+                                                                    <div className={`absolute left-0 top-1.5 w-6 h-6 rounded-full flex items-center justify-center shrink-0 ring-4 ring-white dark:ring-slate-800 transition-colors ${i === 0 ? 'bg-indigo-500 text-white shadow-md shadow-indigo-500/20' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400 group-hover/item:text-indigo-500'}`}>
+                                                                        {i === 0 ? <CheckCircle className="w-3.5 h-3.5" /> : <Clock className="w-3.5 h-3.5" />}
+                                                                    </div>
+                                                                    <div className={`bg-white dark:bg-slate-900 p-4 rounded-2xl border transition-all shadow-sm group-hover/item:shadow-md ${i === 0 ? 'border-indigo-200 dark:border-indigo-500/50 ring-1 ring-indigo-500/10' : 'border-slate-200 dark:border-slate-700 group-hover/item:border-indigo-200 dark:group-hover/item:border-indigo-900/50'}`}>
+                                                                        <div className="flex justify-between items-center mb-1.5">
+                                                                            <span className={`text-xs font-bold ${i === 0 ? 'text-indigo-700 dark:text-indigo-400' : 'text-slate-800 dark:text-slate-200'}`}>v{v.versionNumber}</span>
+                                                                            <span className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500">{new Date(v.createdAt).toLocaleDateString()}</span>
+                                                                        </div>
+                                                                        <p className="text-[11px] text-slate-600 dark:text-slate-400 font-medium leading-relaxed transition-colors">{v.changeReason}</p>
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+                                                            {versions.length === 0 && (
+                                                                <div className="pl-6 text-sm font-medium text-slate-500 dark:text-slate-400 italic">No historical revisions found.</div>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <div className="p-20 text-center animate-fade-in flex flex-col items-center justify-center h-full min-h-[500px]">
+                                        <div className="w-20 h-20 bg-slate-50 dark:bg-slate-800/50 rounded-3xl flex items-center justify-center mx-auto mb-6 ring-1 ring-slate-200 dark:ring-slate-700 shadow-inner shadow-slate-200/50 dark:shadow-slate-900/50 transition-all hover:scale-105">
+                                            <FileText className="w-10 h-10 text-slate-400 dark:text-slate-500" />
+                                        </div>
+                                        <h3 className="text-2xl font-black text-slate-900 dark:text-white mb-3 transition-colors">Classified or Restricted Data</h3>
+                                        <p className="text-slate-500 dark:text-slate-400 font-medium transition-colors max-w-md mx-auto leading-relaxed">
+                                            The requested intelligence brief could not be located, or your clearance level prohibits access to its payload.
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
+                            {/* Chat Sidebar (Floating Design) */}
+                            {report && (
+                                <div className="w-full xl:w-[420px] p-4 sm:p-6 xl:pl-0 shrink-0 z-20 xl:sticky xl:top-6 transition-all duration-500">
+                                    <div className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-2xl border border-slate-200/80 dark:border-slate-700/80 flex flex-col h-[600px] xl:h-[calc(100vh-140px)] rounded-[2rem] shadow-[0_8px_40px_-12px_rgba(0,0,0,0.1)] dark:shadow-[0_8px_40px_-12px_rgba(0,0,0,0.5)] overflow-hidden ring-1 ring-white/50 dark:ring-slate-800/50 transition-all">
+
+                                        {/* Header */}
+                                        <div className="flex items-center justify-between p-5 md:p-6 border-b border-slate-200/50 dark:border-slate-800/80 bg-white/40 dark:bg-slate-900/40 relative overflow-hidden transition-colors">
+                                            <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 dark:bg-indigo-500/20 blur-3xl -z-10 rounded-full mix-blend-multiply dark:mix-blend-screen"></div>
+                                            <div className="flex items-center gap-3.5 z-10">
+                                                <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center ring-1 ring-indigo-100 dark:ring-indigo-800 shadow-inner group transition-all">
+                                                    <MessageSquare className="w-5 h-5 text-indigo-500 dark:text-indigo-400 group-hover:scale-110 transition-transform duration-300" />
+                                                </div>
+                                                <div>
+                                                    <h2 className="font-black text-slate-900 dark:text-white tracking-tight transition-colors">Team Comms</h2>
+                                                    <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-0.5">{chatChannel ? chatChannel.name : 'Securing link...'}</p>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center bg-white/50 dark:bg-slate-800/50 px-3 py-1.5 rounded-full ring-1 ring-slate-200/50 dark:ring-slate-700/50 backdrop-blur-sm z-10 shadow-sm transition-colors">
+                                                <div className="relative flex h-2 w-2 mr-2">
+                                                    {isChatConnected && <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>}
+                                                    <span className={`relative inline-flex rounded-full h-2 w-2 ${isChatConnected ? 'bg-emerald-500' : 'bg-amber-500'}`}></span>
+                                                </div>
+                                                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase">{isChatConnected ? 'Live' : 'Syncing'}</span>
+                                            </div>
+                                        </div>
+
+                                        {/* Messages Area */}
+                                        <div className="flex-1 overflow-y-auto p-6 space-y-5 custom-scrollbar bg-slate-50/30 dark:bg-slate-900/20">
+                                            {messages.map((msg, idx) => {
+                                                const isMe = msg.senderName === user?.email;
+                                                return (
+                                                    <div key={idx} className={`flex ${isMe ? 'justify-end' : 'justify-start'} animate-fade-in-up`} style={{ animationFillMode: 'both' }}>
+                                                        <div className={`max-w-[85%] rounded-[1.25rem] px-5 py-3.5 shadow-sm transform transition-transform hover:scale-[1.02] ${isMe ? 'bg-gradient-to-br from-indigo-500 to-indigo-600 text-white rounded-br-sm shadow-indigo-500/20' : 'bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 rounded-bl-sm ring-1 ring-slate-200/50 dark:ring-slate-700/50'}`}>
+                                                            <div className={`text-[10px] font-bold mb-1.5 flex justify-between gap-5 tracking-wide ${isMe ? 'text-indigo-100' : 'text-slate-400 dark:text-slate-500'}`}>
+                                                                <span>{msg.senderName?.split('@')[0] || 'System'}</span>
+                                                                <span>{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                                            </div>
+                                                            <p className="text-sm font-medium leading-relaxed whitespace-pre-wrap">{msg.content}</p>
                                                         </div>
                                                     </div>
-                                                ))}
-                                                {versions.length === 0 && (
-                                                    <div className="pl-6 text-sm font-medium text-slate-500 dark:text-slate-400 italic transition-colors">No historical revisions found.</div>
-                                                )}
+                                                );
+                                            })}
+                                            <div ref={messagesEndRef} />
+                                        </div>
+
+                                        {/* Input Area */}
+                                        <div className="p-4 sm:p-5 bg-white/60 dark:bg-slate-900/60 border-t border-slate-200/50 dark:border-slate-800/80 backdrop-blur-xl transition-colors">
+                                            <div className="flex gap-2.5 p-1.5 bg-slate-100/80 dark:bg-slate-800/80 rounded-2xl ring-1 ring-slate-200/50 dark:ring-slate-700/50 focus-within:ring-2 focus-within:ring-indigo-500/40 focus-within:bg-white dark:focus-within:bg-slate-900 shadow-inner focus-within:shadow-md transition-all duration-300 ease-out group">
+                                                <input
+                                                    type="text"
+                                                    value={newMessage}
+                                                    onChange={(e) => setNewMessage(e.target.value)}
+                                                    onKeyDown={(e) => e.key === 'Enter' && handleSendChatMessage()}
+                                                    placeholder="Transmit intelligence..."
+                                                    disabled={!chatChannel}
+                                                    className="flex-1 bg-transparent px-4 text-sm font-medium focus:outline-none text-slate-900 dark:text-white disabled:opacity-50 placeholder:text-slate-400 dark:placeholder:text-slate-500 transition-colors"
+                                                />
+                                                <button
+                                                    onClick={handleSendChatMessage}
+                                                    disabled={!chatChannel || !newMessage.trim()}
+                                                    className="p-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl disabled:opacity-50 hover:shadow-lg hover:shadow-indigo-500/30 flex items-center justify-center transform active:scale-90 hover:-translate-y-0.5 transition-all duration-300 ease-out group-focus-within:bg-indigo-500"
+                                                >
+                                                    <SendIcon className="w-4 h-4 transform group-focus-within:translate-x-0.5 group-focus-within:-translate-y-0.5 transition-transform" />
+                                                </button>
                                             </div>
-                                        )}
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
-                        )
+                            )}
+                        </div>
                     )}
                 </div>
             </div>

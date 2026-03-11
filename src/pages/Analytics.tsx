@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { Layout } from '../components/Layout';
 import { apiClient } from '../services/api';
 import {
@@ -164,22 +165,22 @@ export function Analytics() {
             </div>
           </div>
 
-          <div className="bg-white/80 backdrop-blur-xl rounded-3xl p-6 border border-slate-200/60 shadow-sm hover:shadow-md transition-all duration-300 group relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-24 h-24 bg-orange-50 rounded-bl-full -z-10 group-hover:scale-110 transition-transform"></div>
+          <Link to="/flagged" className="bg-white/80 backdrop-blur-xl rounded-3xl p-6 border border-rose-200/60 shadow-sm hover:shadow-md hover:ring-2 hover:ring-rose-500/50 transition-all duration-300 group relative overflow-hidden block cursor-pointer">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-rose-50 rounded-bl-full -z-10 group-hover:scale-110 transition-transform"></div>
             <div className="flex items-center justify-between mb-6">
               <div>
                 <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Flagged</p>
-                <p className="text-4xl font-black text-orange-600">{stats?.flaggedReports || 0}</p>
+                <p className="text-4xl font-black text-rose-600">{stats?.flaggedReports || 0}</p>
               </div>
-              <div className="w-14 h-14 bg-orange-50 rounded-2xl flex items-center justify-center group-hover:-rotate-12 transition-transform shadow-inner">
-                <AlertTriangle className="w-7 h-7 text-orange-600" />
+              <div className="w-14 h-14 bg-rose-50 rounded-2xl flex items-center justify-center group-hover:-rotate-12 transition-transform shadow-inner">
+                <AlertTriangle className="w-7 h-7 text-rose-600" />
               </div>
             </div>
-            <div className="flex items-center text-xs font-semibold text-orange-600 bg-orange-50/50 w-fit px-3 py-1.5 rounded-lg">
+            <div className="flex items-center text-xs font-semibold text-rose-600 bg-rose-50/50 w-fit px-3 py-1.5 rounded-lg">
               <AlertTriangle className="w-4 h-4 mr-1.5" />
               <span>Requires attention</span>
             </div>
-          </div>
+          </Link>
 
           <div className="bg-white/80 backdrop-blur-xl rounded-3xl p-6 border border-slate-200/60 shadow-sm hover:shadow-md transition-all duration-300 group relative overflow-hidden">
             <div className="absolute top-0 right-0 w-24 h-24 bg-red-50 rounded-bl-full -z-10 group-hover:scale-110 transition-transform"></div>

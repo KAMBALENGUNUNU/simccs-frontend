@@ -18,6 +18,34 @@ export enum WorkflowAction {
   REJECT = 'REJECT',
   REQUEST_REVISION = 'REQUEST_REVISION',
   FLAG_MISINFORMATION = 'FLAG_MISINFORMATION',
+  PUBLISH = 'PUBLISH',
+}
+
+export interface ReportAction {
+  id: number;
+  reportId: number;
+  action: string;
+  comment: string;
+  actorName: string;
+  createdAt: string;
+}
+
+export interface AiEditorRequest {
+  reportId: number;
+  tone?: string;
+  customRules?: string;
+}
+
+export interface AiEditorResponse {
+  suggestedContent: string;
+}
+
+export interface ChatMessage {
+  id?: number;
+  senderName: string;
+  content: string;
+  timestamp: string;
+  channelId: number;
 }
 
 export interface ResponseDTO<T> {
@@ -48,6 +76,8 @@ export interface JwtResponse {
   email: string;
   roles: string[];
   enabled: boolean;
+  fullName?: string;
+  username?: string;
 }
 
 export interface MfaSetupResponse {
@@ -65,6 +95,7 @@ export interface ReportRequest {
   summary: string;
   latitude: number;
   longitude: number;
+  locationName?: string;
   casualtyCount?: number;
   categories?: string[];
   mediaFiles?: string[];
@@ -76,12 +107,15 @@ export interface ReportResponse {
   content: string;
   summary: string;
   authorName: string;
+  authorId?: number;
   status: string;
   latitude: number;
   longitude: number;
+  locationName?: string;
   casualtyCount?: number;
   createdAt: string;
   categories?: string[];
+  mediaFiles?: string[];
 }
 
 export interface ReviewRequest {
@@ -134,4 +168,11 @@ export interface DashboardStats {
     status: string;
     createdAt: string;
   }>;
+}
+
+export interface ChannelDTO {
+  id: number;
+  name: string;
+  description?: string;
+  type: string;
 }

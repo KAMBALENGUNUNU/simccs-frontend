@@ -110,9 +110,9 @@ export function Welcome() {
             <div className="w-14 h-14 bg-indigo-100 dark:bg-indigo-500/20 rounded-2xl flex items-center justify-center mb-6 border border-indigo-200 dark:border-indigo-500/30">
               <Globe className="w-7 h-7 text-indigo-600 dark:text-indigo-300" />
             </div>
-            <h3 className="text-2xl font-bold text-slate-900 dark:text-white mb-4">{t('welcome.card1.title')}</h3>
+            <h3 className="text-2xl font-bold text-slate-900 dark:text-white mb-4">Real-Time Intelligence Mapping</h3>
             <p className="text-slate-600 dark:text-slate-400 leading-relaxed">
-              {t('welcome.card1.desc')}
+              Deploy crisis reports instantly from the field. Utilize automatic geolocation to populate exact coordinates and map pins to visually track critical events worldwide.
             </p>
           </div>
 
@@ -122,9 +122,9 @@ export function Welcome() {
             <div className="w-14 h-14 bg-cyan-100 dark:bg-cyan-500/20 rounded-2xl flex items-center justify-center mb-6 border border-cyan-200 dark:border-cyan-500/30">
               <Lock className="w-7 h-7 text-cyan-600 dark:text-cyan-300" />
             </div>
-            <h3 className="text-2xl font-bold text-slate-900 dark:text-white mb-4">{t('welcome.card2.title')}</h3>
+            <h3 className="text-2xl font-bold text-slate-900 dark:text-white mb-4">Secure Intelligence Vault</h3>
             <p className="text-slate-600 dark:text-slate-400 leading-relaxed">
-              {t('welcome.card2.desc')}
+              Protect your sources and field data with military-grade end-to-end encryption. Granular role-based access ensures only authorized Command Center personnel view sensitive intel.
             </p>
           </div>
 
@@ -134,9 +134,9 @@ export function Welcome() {
             <div className="w-14 h-14 bg-blue-100 dark:bg-blue-500/20 rounded-2xl flex items-center justify-center mb-6 border border-blue-200 dark:border-blue-500/30">
               <Zap className="w-7 h-7 text-blue-600 dark:text-blue-300" />
             </div>
-            <h3 className="text-2xl font-bold text-slate-900 dark:text-white mb-4">{t('welcome.card3.title')}</h3>
+            <h3 className="text-2xl font-bold text-slate-900 dark:text-white mb-4">AI Misinformation Detection</h3>
             <p className="text-slate-600 dark:text-slate-400 leading-relaxed">
-              {t('welcome.card3.desc')}
+              Expedite verification with our integrated heuristic AI engine. Automatically cross-reference submitted reports to identify and quarantine potential misinformation before publishing.
             </p>
           </div>
         </div>

@@ -65,25 +65,41 @@ export function ReviewQueue() {
       action: WorkflowAction.APPROVE,
       label: 'Verify Intel',
       icon: CheckCircle,
-      color: 'bg-emerald-50 text-emerald-700 hover:bg-emerald-600 hover:text-white border-emerald-200 hover:border-emerald-600',
+      colorClass: 'text-emerald-600 dark:text-emerald-400',
+      bgClass: 'bg-emerald-50/50 dark:bg-emerald-900/20',
+      borderClass: 'border-emerald-200/50 dark:border-emerald-800/50',
+      hoverClass: 'hover:bg-emerald-500 hover:text-white hover:shadow-[0_8px_30px_-4px_rgba(16,185,129,0.5)] dark:hover:shadow-[0_8px_30px_-4px_rgba(16,185,129,0.3)] hover:border-transparent',
+      ringClass: 'group-hover:ring-emerald-500/30'
     },
     {
       action: WorkflowAction.REJECT,
       label: 'Reject',
       icon: XCircle,
-      color: 'bg-rose-50 text-rose-700 hover:bg-rose-600 hover:text-white border-rose-200 hover:border-rose-600',
+      colorClass: 'text-rose-600 dark:text-rose-400',
+      bgClass: 'bg-rose-50/50 dark:bg-rose-900/20',
+      borderClass: 'border-rose-200/50 dark:border-rose-800/50',
+      hoverClass: 'hover:bg-rose-500 hover:text-white hover:shadow-[0_8px_30px_-4px_rgba(244,63,94,0.5)] dark:hover:shadow-[0_8px_30px_-4px_rgba(244,63,94,0.3)] hover:border-transparent',
+      ringClass: 'group-hover:ring-rose-500/30'
     },
     {
       action: WorkflowAction.REQUEST_REVISION,
-      label: 'Request Clarification',
+      label: 'Clarify',
       icon: AlertCircle,
-      color: 'bg-amber-50 text-amber-700 hover:bg-amber-500 hover:text-white border-amber-200 hover:border-amber-500',
+      colorClass: 'text-amber-600 dark:text-amber-400',
+      bgClass: 'bg-amber-50/50 dark:bg-amber-900/20',
+      borderClass: 'border-amber-200/50 dark:border-amber-800/50',
+      hoverClass: 'hover:bg-amber-500 hover:text-white hover:shadow-[0_8px_30px_-4px_rgba(245,158,11,0.5)] dark:hover:shadow-[0_8px_30px_-4px_rgba(245,158,11,0.3)] hover:border-transparent',
+      ringClass: 'group-hover:ring-amber-500/30'
     },
     {
       action: WorkflowAction.FLAG_MISINFORMATION,
-      label: 'Flag as Disinfo',
+      label: 'Disinfo',
       icon: AlertTriangle,
-      color: 'bg-slate-900 text-white hover:bg-black border-slate-800',
+      colorClass: 'text-slate-700 dark:text-slate-300',
+      bgClass: 'bg-slate-100/50 dark:bg-slate-800/50',
+      borderClass: 'border-slate-300/50 dark:border-slate-700/50',
+      hoverClass: 'hover:bg-slate-900 hover:text-white dark:hover:bg-black dark:hover:text-white hover:shadow-[0_8px_30px_-4px_rgba(15,23,42,0.5)] dark:hover:shadow-[0_8px_30px_-4px_rgba(0,0,0,0.5)] hover:border-transparent',
+      ringClass: 'group-hover:ring-slate-900/30 dark:group-hover:ring-white/30'
     },
   ];
 
@@ -102,7 +118,7 @@ export function ReviewQueue() {
 
   return (
     <Layout>
-      <div className="animate-fade-in max-w-7xl mx-auto space-y-8 h-[calc(100vh-8rem)] flex flex-col">
+      <div className="animate-fade-in max-w-7xl mx-auto space-y-8 flex flex-col pb-12">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white/60 dark:bg-slate-900/60 p-6 sm:p-8 rounded-3xl shadow-sm border border-slate-200/60 dark:border-slate-800/60 backdrop-blur-xl shrink-0 transition-colors">
           <div>
             <h1 className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-white tracking-tight flex items-center space-x-3 transition-colors">
@@ -120,9 +136,9 @@ export function ReviewQueue() {
           </div>
         )}
 
-        <div className="flex flex-col lg:flex-row gap-6 flex-1 min-h-0">
+        <div className="flex flex-col lg:flex-row gap-6 items-start">
           {/* Left Column: Queue List */}
-          <div className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl rounded-3xl border border-slate-200/60 dark:border-slate-800/60 shadow-sm flex flex-col w-full lg:w-1/3 shrink-0 lg:shrink h-80 lg:h-full transition-colors">
+          <div className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl rounded-3xl border border-slate-200/60 dark:border-slate-800/60 shadow-sm flex flex-col w-full lg:w-1/3 shrink-0 lg:sticky lg:top-8 h-[600px] lg:h-[calc(100vh-6rem)] transition-colors">
             <div className="p-6 border-b border-slate-200/60 dark:border-slate-800/60 bg-white/50 dark:bg-slate-900/50 flex items-center justify-between transition-colors">
               <h2 className="text-xl font-bold text-slate-900 dark:text-white transition-colors">
                 Inbox
@@ -176,9 +192,9 @@ export function ReviewQueue() {
           </div>
 
           {/* Right Column: Preview & Action Panel */}
-          <div className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl rounded-3xl border border-slate-200/60 dark:border-slate-800/60 shadow-sm flex flex-col w-full lg:w-2/3 flex-1 min-h-[500px] transition-colors">
+          <div className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl rounded-3xl border border-slate-200/60 dark:border-slate-800/60 shadow-sm w-full lg:w-2/3 flex-1 transition-colors overflow-hidden flex flex-col">
             {selectedReport ? (
-              <div className="flex flex-col h-full overflow-hidden">
+              <div className="flex flex-col w-full">
                 {/* Header Details */}
                 <div className="p-8 border-b border-slate-200/60 dark:border-slate-800/60 bg-white/50 dark:bg-slate-900/50 shrink-0 transition-colors">
                   <div className="flex items-start justify-between gap-4 mb-6">
@@ -219,8 +235,8 @@ export function ReviewQueue() {
                   </div>
                 </div>
 
-                {/* Content Scroll Area */}
-                <div className="flex-1 overflow-y-auto p-8 space-y-8">
+                {/* Content Area */}
+                <div className="p-8 space-y-8 flex-1">
                   <div>
                     <h4 className="text-xs font-bold uppercase tracking-wider text-indigo-500 dark:text-indigo-400 mb-3 ml-1 transition-colors">Executive Summary</h4>
                     <div className="p-6 bg-indigo-50/50 dark:bg-indigo-900/20 rounded-2xl border border-indigo-100 dark:border-indigo-500/20 text-indigo-900 dark:text-indigo-300 text-lg leading-relaxed font-medium transition-colors">
@@ -229,8 +245,8 @@ export function ReviewQueue() {
                   </div>
 
                   <div>
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3 ml-1 transition-colors">Full Tactical Payload</h4>
-                    <div className="text-slate-700 dark:text-slate-300 whitespace-pre-wrap leading-relaxed transition-colors">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3 ml-1 transition-colors">Full Decrypted Payload</h4>
+                    <div className="text-slate-800 dark:text-slate-300 whitespace-pre-wrap leading-relaxed transition-colors font-serif bg-slate-50/50 dark:bg-slate-800/30 p-6 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 shadow-inner">
                       {selectedReport.content}
                     </div>
                   </div>
@@ -290,19 +306,27 @@ export function ReviewQueue() {
                       </button>
                     </div>
                   ) : (
-                    <div className="animate-fade-in">
-                      <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-4 text-center transition-colors">Adjudication Protocols</h4>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                        {actionButtons.map((btn) => {
+                    <div className="animate-fade-in pb-2">
+                      <h4 className="flex items-center justify-center gap-2 text-xs font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500 mb-6 text-center transition-colors">
+                        Adjudication Protocols
+                      </h4>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        {actionButtons.map((btn, index) => {
                           const Icon = btn.icon;
+                          const delay = index * 50;
                           return (
                             <button
                               key={btn.action}
                               onClick={() => setAction(btn.action)}
-                              className={`flex flex-col items-center justify-center space-y-2 p-4 rounded-xl font-bold transition-all border shadow-sm group ${btn.color} dark:bg-opacity-20 dark:border-opacity-30`}
+                              style={{ animationDelay: `${delay}ms`, animationFillMode: 'both' }}
+                              className={`relative overflow-hidden flex flex-col items-center justify-center space-y-4 p-5 rounded-[1.5rem] font-bold transition-all duration-500 ease-out border shadow-sm group animate-fade-in-up 
+                                ${btn.bgClass} ${btn.borderClass} ${btn.colorClass} ${btn.hoverClass} hover:-translate-y-1`}
                             >
-                              <Icon className="w-5 h-5 group-hover:scale-110 transition-transform" />
-                              <span className="text-[11px] uppercase tracking-wider text-center">{btn.label}</span>
+                              <div className="absolute inset-0 bg-white/20 dark:bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500 mix-blend-overlay"></div>
+                              <div className={`relative z-10 w-12 h-12 rounded-2xl flex items-center justify-center bg-white dark:bg-slate-900 shadow-sm border ${btn.borderClass} group-hover:border-transparent group-hover:bg-white/20 dark:group-hover:bg-black/20 group-hover:scale-110 group-hover:-translate-y-1 transition-all duration-500 ease-out ${btn.ringClass} group-hover:ring-4`}>
+                                <Icon className="w-6 h-6 transition-transform duration-500 group-hover:scale-110" />
+                              </div>
+                              <span className="relative z-10 text-[11px] sm:text-xs uppercase tracking-widest text-center mt-2 group-hover:-translate-y-0.5 transition-transform duration-500">{btn.label}</span>
                             </button>
                           );
                         })}

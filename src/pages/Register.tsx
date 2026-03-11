@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Shield, Mail, Lock, User, AlertCircle, CheckCircle, Fingerprint, Info } from 'lucide-react';
+import { Shield, Mail, Lock, User, AlertCircle, CheckCircle, Fingerprint, Info, Badge } from 'lucide-react';
 import { apiClient } from '../services/api';
 import { UserRole } from '../types/api';
 import { AuthLayout } from '../components/AuthLayout';
@@ -12,6 +12,7 @@ export function Register() {
     password: '',
     confirmPassword: '',
     fullName: '',
+    nationalId: '',
     role: UserRole.JOURNALIST,
   });
   const [error, setError] = useState('');
@@ -39,6 +40,7 @@ export function Register() {
         email: formData.email,
         password: formData.password,
         fullName: formData.fullName,
+        nationalId: formData.nationalId,
         role: [formData.role],
       });
 
@@ -114,6 +116,23 @@ export function Register() {
           </div>
 
           <div className="space-y-2">
+            <label htmlFor="nationalId" className="block text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-widest pl-1 transition-colors">
+              National Journalistic ID Number
+            </label>
+            <div className="relative group/input">
+              <Badge className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400 dark:text-slate-500 group-focus-within/input:text-indigo-500 dark:group-focus-within/input:text-indigo-400 transition-colors" />
+              <input
+                id="nationalId"
+                type="text"
+                value={formData.nationalId}
+                onChange={(e) => setFormData({ ...formData, nationalId: e.target.value })}
+                className="w-full pl-12 pr-4 py-4 bg-slate-50/50 dark:bg-black/20 border border-slate-200 dark:border-white/10 rounded-2xl focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 dark:focus:border-indigo-500 transition-all font-medium text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-600 focus:bg-white dark:focus:bg-black/40 tracking-widest"
+                placeholder="ID-XXXX-YYYY"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
             <label htmlFor="email" className="block text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-widest pl-1 transition-colors">
               Telecom Vector
             </label>
@@ -143,7 +162,6 @@ export function Register() {
             >
               <option value={UserRole.JOURNALIST} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Field Operative (Journalist)</option>
               <option value={UserRole.EDITOR} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Command Center (Editor)</option>
-              <option value={UserRole.ADMIN} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">System Admin (Level 5)</option>
             </select>
           </div>
 

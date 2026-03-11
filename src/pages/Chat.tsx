@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Client } from '@stomp/stompjs';
-import SockJS from 'sockjs-client';
+import { fetchEventSource } from '@microsoft/fetch-event-source';
 import { Layout } from '../components/Layout';
 import { useAuth } from '../contexts/AuthContext';
 import { apiClient } from '../services/api';
@@ -31,7 +30,7 @@ export function Chat() {
     const [newChannelName, setNewChannelName] = useState('');
 
     // Refs
-    const stompClientRef = useRef<Client | null>(null);
+    const abortControllerRef = useRef<AbortController | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     // 1. Load Channel List on Mount
@@ -52,7 +51,7 @@ export function Chat() {
         }
     };
 
-    // 2. Load History & Connect WebSocket when Channel ID changes
+    // 2. Load History & Connect SSE when Channel ID changes
     useEffect(() => {
         if (!channelId) return;
 
@@ -66,38 +65,64 @@ export function Chat() {
                 scrollToBottom();
             });
 
-        // Setup WebSocket
-        const socket = new SockJS('http://localhost:8080/ws');
-        const client = new Client({
-            webSocketFactory: () => socket,
-            connectHeaders: { Authorization: `Bearer ${localStorage.getItem('token')}` },
-            onConnect: () => {
-                setIsConnected(true);
-                // Subscribe specifically to THIS channel ID
-                client.subscribe(`/topic/channel/${channelId}`, (message) => {
-                    const receivedMsg: Message = JSON.parse(message.body);
-                    // Only add if it belongs to current channel
-                    if (receivedMsg.channelId === parseInt(channelId)) {
-                        setMessages((prev) => [...prev, receivedMsg]);
-                        scrollToBottom();
+        // Abort previous SSE connection if exists
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+        }
+
+        const abortController = new AbortController();
+        abortControllerRef.current = abortController;
+
+        const connectSSE = async () => {
+            try {
+                await fetchEventSource(`http://localhost:8080/api/chat/channels/${channelId}/stream`, {
+                    method: 'GET',
+                    headers: {
+                        Authorization: `Bearer ${localStorage.getItem('token')}`,
+                    },
+                    signal: abortController.signal,
+                    onopen: async (response) => {
+                        if (response.ok) {
+                            setIsConnected(true);
+                        } else {
+                            console.error('SSE Connection failed', response.status);
+                        }
+                    },
+                    onmessage: (event) => {
+                        if (event.event === 'message') {
+                            const receivedMsg: Message = JSON.parse(event.data);
+                            if (receivedMsg.channelId === parseInt(channelId)) {
+                                setMessages((prev) => [...prev, receivedMsg]);
+                                scrollToBottom();
+                            }
+                        }
+                    },
+                    onclose: () => {
+                        setIsConnected(false);
+                    },
+                    onerror: (err) => {
+                        console.error('SSE Error:', err);
+                        setIsConnected(false);
+                        throw err; // let fetchEventSource retry
                     }
                 });
-            },
-            onDisconnect: () => setIsConnected(false),
-        });
+            } catch (err) {
+                // Connection aborted or retry limit reached
+            }
+        };
 
-        client.activate();
-        stompClientRef.current = client;
+        connectSSE();
 
         return () => {
-            client.deactivate();
+            abortController.abort();
+            setIsConnected(false);
         };
     }, [channelId]);
 
     const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
 
-    const handleSendMessage = () => {
-        if (!newMessage.trim() || !stompClientRef.current || !channelId) return;
+    const handleSendMessage = async () => {
+        if (!newMessage.trim() || !channelId) return;
 
         const payload = {
             content: newMessage,
@@ -105,16 +130,19 @@ export function Chat() {
             channelId: parseInt(channelId),
         };
 
-        stompClientRef.current.publish({
-            destination: `/app/chat/${channelId}`,
-            body: JSON.stringify(payload),
-        });
+        const currentMessage = newMessage;
+        setNewMessage(''); // optimistic clear UI
 
-        setNewMessage('');
+        try {
+            await apiClient.request('POST', `/api/chat/channels/${channelId}/messages`, payload);
+        } catch (err) {
+            console.error("Failed to send message", err);
+            setNewMessage(currentMessage); // revert on error
+        }
     };
 
     const handleCreateChannel = async () => {
-        if(!newChannelName.trim()) return;
+        if (!newChannelName.trim()) return;
         try {
             const res = await apiClient.request<ChannelDTO>('POST', '/api/chat/channels', {
                 name: newChannelName,
@@ -125,7 +153,7 @@ export function Chat() {
             setIsCreating(false);
             setNewChannelName('');
             navigate(`/chat/${res.data.id}`);
-        } catch(err) {
+        } catch (err) {
             alert('Failed to create channel');
         }
     };
@@ -158,11 +186,10 @@ export function Chat() {
                             <button
                                 key={channel.id}
                                 onClick={() => navigate(`/chat/${channel.id}`)}
-                                className={`w-full flex items-center px-3 py-2 rounded-lg text-sm transition-colors ${
-                                    channel.id.toString() === channelId
+                                className={`w-full flex items-center px-3 py-2 rounded-lg text-sm transition-colors ${channel.id.toString() === channelId
                                         ? 'bg-blue-100 text-blue-800 font-medium'
                                         : 'text-gray-600 hover:bg-gray-200'
-                                }`}
+                                    }`}
                             >
                                 <Hash className="w-4 h-4 mr-2 opacity-70" />
                                 <span className="truncate">{channel.name}</span>
@@ -194,14 +221,13 @@ export function Chat() {
                             const isMe = msg.senderName === user?.email;
                             return (
                                 <div key={index} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
-                                    <div className={`max-w-[75%] rounded-2xl px-4 py-3 ${
-                                        isMe
+                                    <div className={`max-w-[75%] rounded-2xl px-4 py-3 ${isMe
                                             ? 'bg-blue-600 text-white rounded-br-sm'
                                             : 'bg-gray-100 text-gray-900 rounded-bl-sm'
-                                    }`}>
+                                        }`}>
                                         <div className={`flex items-center space-x-2 text-xs mb-1 ${isMe ? 'text-blue-100' : 'text-gray-500'}`}>
                                             <span className="font-bold">{msg.senderName.split('@')[0]}</span>
-                                            <span>• {new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                                            <span>• {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                                         </div>
                                         <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
                                     </div>
@@ -221,11 +247,11 @@ export function Chat() {
                                 onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
                                 placeholder={`Message #${activeChannel?.name || '...'}`}
                                 className="flex-1 px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-                                disabled={!isConnected || !channelId}
+                                disabled={!channelId}
                             />
                             <button
                                 onClick={handleSendMessage}
-                                disabled={!isConnected || !newMessage.trim()}
+                                disabled={!channelId || !newMessage.trim()}
                                 className="bg-blue-600 text-white p-3 rounded-xl hover:bg-blue-700 disabled:opacity-50 transition-colors"
                             >
                                 <Send className="w-5 h-5" />

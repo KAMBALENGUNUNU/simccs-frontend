@@ -9,6 +9,7 @@ import {
   XCircle,
   AlertTriangle,
   ChevronRight,
+  MapPin,
 } from 'lucide-react';
 import { Layout } from '../components/Layout';
 import { apiClient } from '../services/api';
@@ -213,6 +214,10 @@ export function Dashboard() {
                                 year: 'numeric',
                               })}
                             </span>
+                          </span>
+                          <span className="flex items-center space-x-1.5 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 px-2.5 py-1 rounded-lg ring-1 ring-emerald-500/20 dark:ring-emerald-500/30 transition-colors">
+                            <MapPin className="w-3.5 h-3.5" />
+                            <span>{report.locationName || 'Location Unknown'}</span>
                           </span>
                           {report.casualtyCount !== undefined && report.casualtyCount > 0 && (
                             <span className="flex items-center space-x-1.5 bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 px-2.5 py-1 rounded-lg ring-1 ring-rose-500/20 dark:ring-rose-500/30 transition-colors">

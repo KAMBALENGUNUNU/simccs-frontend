@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { Layout } from '../components/Layout';
 import { apiClient } from '../services/api';
 import { AlertTriangle, ShieldAlert, FlagOff, CheckCircle2 } from 'lucide-react';
@@ -73,7 +74,7 @@ export function FlaggedReports() {
                                         <div className="flex flex-wrap items-center justify-between gap-4">
                                             <div>
                                                 <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-1 transition-colors">Investigation ID</h3>
-                                                <p className="font-mono text-sm font-bold text-slate-900 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-lg inline-block transition-colors">{flag.reportId || flag.id || 'N/A'}</p>
+                                                <p className="font-mono text-sm font-bold text-slate-900 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-lg inline-block transition-colors">{flag.report?.id || flag.id || 'N/A'}</p>
                                             </div>
                                             {flag.aiConfidenceScore && (
                                                 <div className="flex flex-col items-end">
@@ -90,9 +91,9 @@ export function FlaggedReports() {
                                             <p className="text-slate-800 dark:text-slate-300 font-medium leading-relaxed transition-colors">{flag.reason}</p>
                                         </div>
                                         <div className="flex gap-3 pt-2">
-                                            <button className="px-5 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold uppercase tracking-wider rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 shadow-sm transition-colors">
+                                            <Link to={`/reports/${flag.report?.id}`} className="px-5 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold uppercase tracking-wider rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 shadow-sm transition-colors text-center flex items-center justify-center">
                                                 Review Payload
-                                            </button>
+                                            </Link>
                                             <button className="px-5 py-2.5 bg-rose-600 text-white text-xs font-bold uppercase tracking-wider rounded-xl hover:bg-rose-700 dark:hover:bg-rose-500 shadow-sm hover:shadow-md transition-all">
                                                 Expunge Immediately
                                             </button>

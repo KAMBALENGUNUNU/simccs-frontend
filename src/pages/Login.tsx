@@ -31,8 +31,12 @@ export function Login() {
       } else {
         setError('Your perimeter clearance is pending administrator approval.');
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Authentication sequence failed. Verify credentials.');
+    } catch (err: any) {
+      if (err.message === 'MFA_REQUIRED') {
+        navigate('/mfa-verify');
+      } else {
+        setError(err instanceof Error ? err.message : 'Authentication sequence failed. Verify credentials.');
+      }
     } finally {
       setLoading(false);
     }

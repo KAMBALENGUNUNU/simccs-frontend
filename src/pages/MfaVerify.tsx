@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Shield, Key, AlertCircle } from 'lucide-react';
-import { apiClient } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
 import { AuthLayout } from '../components/AuthLayout';
 
 export function MfaVerify() {
   const navigate = useNavigate();
+  const { verifyMfaLogin } = useAuth();
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -16,8 +17,15 @@ export function MfaVerify() {
     setLoading(true);
 
     try {
-      await apiClient.verifyMfa({ code });
-      navigate('/dashboard');
+      const userData = await verifyMfaLogin(code);
+
+      if (userData.roles.includes('ROLE_ADMIN')) {
+        navigate('/admin');
+      } else if (userData.roles.includes('ROLE_EDITOR')) {
+        navigate('/review-queue');
+      } else {
+        navigate('/dashboard');
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Invalid verification code');
       setCode('');

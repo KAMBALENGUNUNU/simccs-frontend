@@ -12,6 +12,8 @@ import {
   MapPin,
   AlertTriangle,
 } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+import { UserRole } from '../types/api';
 
 export function Reports() {
   const [reports, setReports] = useState<ReportResponse[]>([]);
@@ -20,6 +22,7 @@ export function Reports() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const { hasRole } = useAuth();
 
   useEffect(() => {
     loadReports();
@@ -106,13 +109,15 @@ export function Reports() {
               </h1>
               <p className="text-slate-500 dark:text-slate-400 mt-2 font-medium transition-colors">Browse and search {filteredReports.length} verified and proposed crisis scenarios.</p>
             </div>
-            <Link
-              to="/reports/new"
-              className="flex items-center space-x-2 px-6 py-3.5 bg-slate-900 dark:bg-indigo-600 text-white rounded-2xl font-bold hover:bg-slate-800 dark:hover:bg-indigo-500 transition-all shadow-lg hover:shadow-slate-900/30 dark:hover:shadow-indigo-500/30 transform hover:-translate-y-0.5 group"
-            >
-              <PlusCircle className="w-5 h-5 group-hover:rotate-90 transition-transform duration-300" />
-              <span>Draft New Intel</span>
-            </Link>
+            {hasRole(UserRole.JOURNALIST) && (
+              <Link
+                to="/reports/new"
+                className="flex items-center space-x-2 px-6 py-3.5 bg-slate-900 dark:bg-indigo-600 text-white rounded-2xl font-bold hover:bg-slate-800 dark:hover:bg-indigo-500 transition-all shadow-lg hover:shadow-slate-900/30 dark:hover:shadow-indigo-500/30 transform hover:-translate-y-0.5 group"
+              >
+                <PlusCircle className="w-5 h-5 group-hover:rotate-90 transition-transform duration-300" />
+                <span>Draft New Intel</span>
+              </Link>
+            )}
           </div>
         </div>
 
@@ -165,7 +170,7 @@ export function Reports() {
                   ? 'Try broadening your search parameters.'
                   : 'Start mapping the environment by drafting your first crisis report.'}
               </p>
-              {!searchTerm && statusFilter === 'all' && (
+              {!searchTerm && statusFilter === 'all' && hasRole(UserRole.JOURNALIST) && (
                 <Link
                   to="/reports/new"
                   className="inline-flex items-center space-x-2 px-8 py-4 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-slate-900 dark:hover:bg-indigo-500 transition-all shadow-lg hover:shadow-indigo-500/25 group"
@@ -215,8 +220,8 @@ export function Reports() {
                         <span className="truncate max-w-[120px]">{report.authorName}</span>
                       </span>
                       <span className="flex items-center space-x-1.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 px-2.5 py-1 rounded-lg">
-                        <MapPin className="w-3.5 h-3.5" />
-                        <span>Loc</span>
+                        <MapPin className="w-3.5 h-3.5 shrink-0" />
+                        <span className="truncate max-w-[150px]" title={report.locationName || 'Unknown Location'}>{report.locationName || 'Location Unknown'}</span>
                       </span>
                       {report.casualtyCount !== undefined && report.casualtyCount > 0 && (
                         <span className="flex items-center space-x-1.5 bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400 px-2.5 py-1 rounded-lg ml-auto ring-1 ring-rose-500/20 dark:ring-rose-500/30">
