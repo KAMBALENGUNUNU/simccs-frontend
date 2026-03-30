@@ -51,6 +51,53 @@
             "encrypted": "Encrypted"
         }
     },
+    "analytics": {
+        "title": "Analytics Dashboard",
+        "subtitle": "Crisis reporting metrics and real-time insights",
+        "export": {
+            "commandCenter": "Command Center Brief",
+            "personnelAudit": "Personnel Audit",
+            "misinfoAudit": "Misinfo Audit",
+            "live": "Live"
+        },
+        "modal": {
+            "title": "Select Date Interval",
+            "allTime": "All Time (Complete History)",
+            "today": "Today (Last 24 Hours)",
+            "weekly": "This Week (Last 7 Days)",
+            "monthly": "This Month (Last 30 Days)",
+            "custom": "Custom Date Range",
+            "startDate": "Start Date",
+            "endDate": "End Date",
+            "generating": "Generating...",
+            "download": "Download PDF",
+            "cancel": "Cancel"
+        },
+        "cards": {
+            "totalReports": "Total Active Reports",
+            "awaitingReview": "Awaiting Review",
+            "approved": "Approved & Published",
+            "rejected": "Rejected",
+            "misinfoRisks": "Misinformation Risks",
+            "criticalPriority": "Critical Priority"
+        }
+    },
+    "pdf": {
+        "commandCenter": {
+            "title": "Command Center Overview",
+            "subtitle": "Global Crisis Operations Summary"
+        },
+        "rawStatus": "Raw Status Breakdown",
+        "detailedLogs": "Detailed Incident Logs",
+        "columns": {
+            "title": "Report Title",
+            "author": "Author",
+            "editor": "Latest Editor",
+            "status": "Status",
+            "date": "Date"
+        },
+        "noReports": "No reports found within the selected interval."
+    },
     "welcome": {
         "brand": "SIMCCS",
         "title1": "Crisis Command.",

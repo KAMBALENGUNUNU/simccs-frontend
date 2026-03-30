@@ -2,7 +2,9 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Layout } from '../components/Layout';
 import { apiClient } from '../services/api';
-import { MapPin, AlertCircle, FileText, UploadCloud, CheckCircle } from 'lucide-react';
+import { MapPin, AlertCircle, FileText, UploadCloud, CheckCircle, Zap, Star, Newspaper, BookOpen, ChevronsUp, ChevronUp, Minus, ChevronDown } from 'lucide-react';
+import { VoiceInput } from '../components/VoiceInput';
+
 
 export function ReportForm() {
   const navigate = useNavigate();
@@ -13,9 +15,26 @@ export function ReportForm() {
     latitude: '',
     longitude: '',
     locationName: '',
-    casualtyCount: '',
-    categories: '',
+    reportType: 'FEATURE',
+    priority: 'NORMAL',
   });
+
+  const reportTypeOptions = [
+    { value: 'BREAKING', label: 'Breaking', description: 'Time-critical breaking news', icon: Zap, color: 'rose' },
+    { value: 'EXCLUSIVE', label: 'Exclusive', description: 'First-hand exclusive account', icon: Star, color: 'amber' },
+    { value: 'PRESS_RELEASE', label: 'Press Release', description: 'Official statement for publication', icon: Newspaper, color: 'indigo' },
+    { value: 'FEATURE', label: 'Feature', description: 'In-depth feature article', icon: BookOpen, color: 'slate' },
+  ];
+
+  const priorityOptions = [
+    { value: 'URGENT', label: 'Urgent', description: 'Requires immediate review', icon: ChevronsUp, color: 'rose', ring: 'ring-rose-500/30 focus:ring-rose-500/40', border: 'border-rose-200 dark:border-rose-800/50', bg: 'bg-rose-50 dark:bg-rose-900/20', text: 'text-rose-700 dark:text-rose-400', dot: 'bg-rose-500' },
+    { value: 'HIGH', label: 'High', description: 'Review within the hour', icon: ChevronUp, color: 'amber', ring: 'ring-amber-500/30 focus:ring-amber-500/40', border: 'border-amber-200 dark:border-amber-800/50', bg: 'bg-amber-50 dark:bg-amber-900/20', text: 'text-amber-700 dark:text-amber-400', dot: 'bg-amber-500' },
+    { value: 'NORMAL', label: 'Normal', description: 'Standard review window', icon: Minus, color: 'indigo', ring: 'ring-indigo-500/30 focus:ring-indigo-500/40', border: 'border-indigo-200 dark:border-indigo-800/50', bg: 'bg-indigo-50 dark:bg-indigo-900/20', text: 'text-indigo-700 dark:text-indigo-400', dot: 'bg-indigo-500' },
+    { value: 'LOW', label: 'Low', description: 'Can be deferred', icon: ChevronDown, color: 'slate', ring: 'ring-slate-500/20 focus:ring-slate-500/30', border: 'border-slate-200 dark:border-slate-700/50', bg: 'bg-slate-50 dark:bg-slate-800/30', text: 'text-slate-600 dark:text-slate-400', dot: 'bg-slate-400' },
+  ];
+
+  const selectedPriority = priorityOptions.find(p => p.value === formData.priority) || priorityOptions[2];
+  const selectedType = reportTypeOptions.find(t => t.value === formData.reportType) || reportTypeOptions[3];
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -81,33 +100,52 @@ export function ReportForm() {
     }
   };
 
+  const saveToOfflineQueue = (data: any) => {
+    const OFFLINE_STORAGE_KEY = 'simccs_offline_reports';
+    const raw = localStorage.getItem(OFFLINE_STORAGE_KEY);
+    let queue = [];
+    if (raw) {
+      try {
+        queue = JSON.parse(raw);
+      } catch (e) {
+        queue = [];
+      }
+    }
+    queue.push(data);
+    localStorage.setItem(OFFLINE_STORAGE_KEY, JSON.stringify(queue));
+    // Dispatch a storage event so OfflineSync components in other tabs/components can update
+    window.dispatchEvent(new Event('storage'));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
 
+    const reportData = {
+      title: formData.title,
+      content: formData.content,
+      summary: formData.summary,
+      latitude: parseFloat(formData.latitude),
+      longitude: parseFloat(formData.longitude),
+      locationName: formData.locationName || undefined,
+      reportType: formData.reportType,
+      priority: formData.priority,
+      mediaFiles: mediaFile ? [mediaFile] : undefined,
+    } as any;
+
     try {
-      const categories = formData.categories
-        .split(',')
-        .map((c) => c.trim())
-        .filter((c) => c);
-
-      // We explicitly pass the mediaFiles as any since type might not strict allow it, but backend accepts it.
-      await apiClient.submitReport({
-        title: formData.title,
-        content: formData.content,
-        summary: formData.summary,
-        latitude: parseFloat(formData.latitude),
-        longitude: parseFloat(formData.longitude),
-        locationName: formData.locationName || undefined,
-        casualtyCount: formData.casualtyCount ? parseInt(formData.casualtyCount) : undefined,
-        categories: categories.length > 0 ? categories : undefined,
-        mediaFiles: mediaFile ? [mediaFile] : undefined,
-      } as any);
-
+      await apiClient.submitReport(reportData);
       navigate('/dashboard');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to submit report');
+      // Check if it's a network error (offline)
+      if (err instanceof TypeError || (err instanceof Error && err.message.toLowerCase().includes('failed to fetch'))) {
+        saveToOfflineQueue(reportData);
+        alert('You are currently offline. Your report has been securely queued locally and will be synced when connectivity returns.');
+        navigate('/dashboard');
+      } else {
+        setError(err instanceof Error ? err.message : 'Failed to submit report');
+      }
     } finally {
       setLoading(false);
     }
@@ -186,10 +224,18 @@ export function ReportForm() {
                 </div>
               </div>
 
+
               <div className="space-y-3 group">
-                <label htmlFor="content" className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 tracking-widest uppercase transition-colors group-hover:text-indigo-600 dark:group-hover:text-indigo-400">
-                  Full Tactical Report <span className="text-rose-500 dark:text-rose-400">*</span>
-                </label>
+                <div className="flex items-center justify-between">
+                  <label htmlFor="content" className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 tracking-widest uppercase transition-colors group-hover:text-indigo-600 dark:group-hover:text-indigo-400">
+                    Full Tactical Report <span className="text-rose-500 dark:text-rose-400">*</span>
+                  </label>
+                  <VoiceInput
+                    onTranscript={(text: string) => setFormData(prev => ({ ...prev, content: prev.content + (prev.content ? ' ' : '') + text }))}
+                  />
+                </div>
+
+
                 <div className="relative h-full">
                   <div className="absolute inset-y-0 left-0 w-1 bg-transparent group-focus-within:bg-indigo-500 dark:group-focus-within:bg-indigo-400 rounded-l-xl transition-colors duration-300"></div>
                   <textarea
@@ -314,43 +360,77 @@ export function ReportForm() {
               )}
             </div>
 
-            {/* Additional Metadata */}
+            {/* Report Classification */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <div className="space-y-3 group">
-                <label
-                  htmlFor="casualtyCount"
-                  className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 tracking-widest uppercase flex items-center justify-between transition-colors group-hover:text-indigo-600 dark:group-hover:text-indigo-400"
-                >
-                  <span>Casualty Metrics</span>
-                  <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold tracking-normal italic">Optional</span>
+
+              {/* Report Type */}
+              <div className="space-y-3">
+                <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 tracking-widest uppercase flex items-center justify-between transition-colors">
+                  <span>Report Type</span>
+                  <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold tracking-normal italic normal-case">Editorial classification</span>
                 </label>
                 <div className="relative">
-                  <input
-                    id="casualtyCount"
-                    type="number"
-                    min="0"
-                    value={formData.casualtyCount}
-                    onChange={(e) => setFormData({ ...formData, casualtyCount: e.target.value })}
-                    className="w-full px-5 py-4 bg-slate-50/50 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-700/60 rounded-xl focus:bg-white dark:focus:bg-slate-800 focus:ring-2 focus:ring-indigo-500/30 dark:focus:ring-indigo-500/20 focus:border-indigo-500 dark:focus:border-indigo-400 transition-all font-semibold text-slate-900 dark:text-white placeholder:text-slate-300 dark:placeholder:text-slate-600 outline-none shadow-sm hover:border-slate-300 dark:hover:border-slate-600"
-                    placeholder="Estimated number..."
-                  />
+                  <div className={`absolute left-0 top-0 bottom-0 w-1 rounded-l-xl transition-colors duration-300 ${selectedType.value === 'BREAKING' ? 'bg-rose-500' :
+                      selectedType.value === 'EXCLUSIVE' ? 'bg-amber-500' :
+                        selectedType.value === 'PRESS_RELEASE' ? 'bg-indigo-500' : 'bg-slate-400'
+                    }`} />
+                  <select
+                    value={formData.reportType}
+                    onChange={(e) => setFormData({ ...formData, reportType: e.target.value })}
+                    className="w-full pl-5 pr-10 py-4 bg-slate-50/50 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-700/60 rounded-xl focus:bg-white dark:focus:bg-slate-800 focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition-all font-semibold text-slate-900 dark:text-white outline-none shadow-sm appearance-none cursor-pointer hover:border-slate-300 dark:hover:border-slate-600"
+                  >
+                    {reportTypeOptions.map(opt => (
+                      <option key={opt.value} value={opt.value}>{opt.label} — {opt.description}</option>
+                    ))}
+                  </select>
+                  <div className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2">
+                    {(() => { const Icon = selectedType.icon; return <Icon className="w-4 h-4 text-slate-400" />; })()}
+                  </div>
                 </div>
+                <p className="text-xs text-slate-400 dark:text-slate-500 font-medium pl-2">
+                  {selectedType.description}
+                </p>
               </div>
 
-              <div className="space-y-3 group">
-                <label htmlFor="categories" className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 tracking-widest uppercase flex items-center justify-between transition-colors group-hover:text-indigo-600 dark:group-hover:text-indigo-400">
-                  <span>Tags & Categories</span>
-                  <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold tracking-normal italic">Comma-separated</span>
+              {/* Priority */}
+              <div className="space-y-3">
+                <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 tracking-widest uppercase flex items-center justify-between transition-colors">
+                  <span>Dispatch Priority</span>
+                  <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold tracking-normal italic normal-case">Review urgency</span>
                 </label>
                 <div className="relative">
-                  <input
-                    id="categories"
-                    type="text"
-                    value={formData.categories}
-                    onChange={(e) => setFormData({ ...formData, categories: e.target.value })}
-                    className="w-full px-5 py-4 bg-slate-50/50 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-700/60 rounded-xl focus:bg-white dark:focus:bg-slate-800 focus:ring-2 focus:ring-indigo-500/30 dark:focus:ring-indigo-500/20 focus:border-indigo-500 dark:focus:border-indigo-400 transition-all font-semibold text-slate-900 dark:text-white placeholder:text-slate-300 dark:placeholder:text-slate-600 outline-none shadow-sm hover:border-slate-300 dark:hover:border-slate-600"
-                    placeholder="e.g. Kinetic, Cyber, Supply Chain"
-                  />
+                  <div className={`absolute left-0 top-0 bottom-0 w-1 rounded-l-xl transition-colors duration-300 ${selectedPriority.dot}`} />
+                  <select
+                    value={formData.priority}
+                    onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
+                    className={`w-full pl-5 pr-10 py-4 border rounded-xl focus:ring-2 transition-all font-bold outline-none shadow-sm appearance-none cursor-pointer ${selectedPriority.value === 'URGENT' ? 'bg-rose-50/80 dark:bg-rose-900/20 border-rose-200 dark:border-rose-800/50 text-rose-700 dark:text-rose-400 focus:ring-rose-500/30 focus:border-rose-500' :
+                        selectedPriority.value === 'HIGH' ? 'bg-amber-50/80 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800/50 text-amber-700 dark:text-amber-400 focus:ring-amber-500/30 focus:border-amber-500' :
+                          selectedPriority.value === 'NORMAL' ? 'bg-slate-50/50 dark:bg-slate-800/50 border-slate-200/60 dark:border-slate-700/60 text-slate-900 dark:text-white focus:ring-indigo-500/30 focus:border-indigo-500' :
+                            'bg-slate-50/30 dark:bg-slate-800/30 border-slate-200/40 dark:border-slate-700/40 text-slate-500 dark:text-slate-400 focus:ring-slate-500/20 focus:border-slate-400'
+                      }`}
+                  >
+                    {priorityOptions.map(opt => (
+                      <option key={opt.value} value={opt.value}>{opt.label.toUpperCase()} — {opt.description}</option>
+                    ))}
+                  </select>
+                  <div className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2">
+                    {(() => { const Icon = selectedPriority.icon; return <Icon className={`w-4 h-4 ${selectedPriority.text}`} />; })()}
+                  </div>
+                </div>
+                <div className="flex gap-2 pt-1">
+                  {priorityOptions.map(opt => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setFormData({ ...formData, priority: opt.value })}
+                      className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all duration-200 ${formData.priority === opt.value
+                          ? `${opt.bg} ${opt.text} ring-1 ${opt.border} shadow-sm scale-105`
+                          : 'bg-transparent text-slate-400 dark:text-slate-600 hover:text-slate-600 dark:hover:text-slate-400'
+                        }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
                 </div>
               </div>
             </div>

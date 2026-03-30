@@ -10,7 +10,26 @@ import {
   AlertTriangle,
   ChevronRight,
   MapPin,
+  Zap,
+  Star,
+  Newspaper,
+  BookOpen,
 } from 'lucide-react';
+
+const PRIORITY_CONFIG: Record<string, { label: string; dot: string; badge: string }> = {
+  URGENT: { label: 'Urgent', dot: 'bg-rose-500', badge: 'bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-400 ring-1 ring-rose-500/20' },
+  HIGH: { label: 'High', dot: 'bg-amber-500', badge: 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 ring-1 ring-amber-500/20' },
+  NORMAL: { label: 'Normal', dot: 'bg-indigo-400', badge: 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 ring-1 ring-indigo-500/20' },
+  LOW: { label: 'Low', dot: 'bg-slate-400', badge: 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400' },
+};
+
+const TYPE_CONFIG: Record<string, { label: string; icon: React.ElementType; badge: string }> = {
+  BREAKING: { label: 'Breaking', icon: Zap, badge: 'bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400' },
+  EXCLUSIVE: { label: 'Exclusive', icon: Star, badge: 'bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400' },
+  PRESS_RELEASE: { label: 'Press Release', icon: Newspaper, badge: 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400' },
+  FEATURE: { label: 'Feature', icon: BookOpen, badge: 'bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400' },
+};
+
 import { Layout } from '../components/Layout';
 import { apiClient } from '../services/api';
 import { ReportResponse } from '../types/api';
@@ -219,17 +238,22 @@ export function Dashboard() {
                             <MapPin className="w-3.5 h-3.5" />
                             <span>{report.locationName || 'Location Unknown'}</span>
                           </span>
-                          {report.casualtyCount !== undefined && report.casualtyCount > 0 && (
-                            <span className="flex items-center space-x-1.5 bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 px-2.5 py-1 rounded-lg ring-1 ring-rose-500/20 dark:ring-rose-500/30 transition-colors">
-                              <AlertTriangle className="w-3.5 h-3.5" />
-                              <span>{report.casualtyCount} casualties</span>
+                          {report.priority && PRIORITY_CONFIG[report.priority] && (
+                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-black uppercase tracking-wider ${PRIORITY_CONFIG[report.priority].badge}`}>
+                              <span className={`w-1.5 h-1.5 rounded-full ${PRIORITY_CONFIG[report.priority].dot}`} />
+                              {PRIORITY_CONFIG[report.priority].label}
                             </span>
                           )}
-                          {report.categories && report.categories.length > 0 && (
-                            <span className="flex items-center space-x-1.5 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 px-2.5 py-1 rounded-lg ring-1 ring-indigo-500/20 dark:ring-indigo-500/30 transition-colors">
-                              <span>{report.categories.join(', ')}</span>
-                            </span>
-                          )}
+                          {report.reportType && TYPE_CONFIG[report.reportType] && (() => {
+                            const cfg = TYPE_CONFIG[report.reportType!];
+                            const Icon = cfg.icon;
+                            return (
+                              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold ${cfg.badge}`}>
+                                <Icon className="w-3.5 h-3.5" />
+                                {cfg.label}
+                              </span>
+                            );
+                          })()}
                         </div>
                       </div>
                     </div>

@@ -14,8 +14,12 @@ import {
   DashboardStats,
   ReportAction,
   AiEditorRequest,
-  AiEditorResponse
+  AiEditorResponse,
+  AiAnalysisResponse,
+  PersonnelStatsDTO,
+  RiskAuditDTO
 } from '../types/api';
+
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
 
@@ -178,9 +182,10 @@ class ApiClient {
     });
   }
 
-  async checkMisinformation(id: number): Promise<ResponseDTO<{ confidenceScore: number; reason: string }>> {
-    return this.execute<{ confidenceScore: number; reason: string }>(`/api/workflow/reports/${id}/ai-check`);
+  async checkMisinformation(id: number): Promise<ResponseDTO<AiAnalysisResponse>> {
+    return this.execute<AiAnalysisResponse>(`/api/workflow/reports/${id}/ai-check`);
   }
+
 
   async getAiSuggestedEdits(data: AiEditorRequest): Promise<ResponseDTO<AiEditorResponse>> {
     return this.execute<AiEditorResponse>('/api/crisis-reports/ai-edit', {
@@ -197,12 +202,29 @@ class ApiClient {
     return this.execute<unknown>(`/api/workflow/reports/${id}/versions`);
   }
 
+  async getReportVersionDetail(reportId: number, versionId: number): Promise<ResponseDTO<unknown>> {
+    return this.execute<unknown>(`/api/workflow/reports/${reportId}/versions/${versionId}`);
+  }
+
   async getReportActions(id: number): Promise<ResponseDTO<ReportAction[]>> {
     return this.execute<ReportAction[]>(`/api/workflow/reports/${id}/actions`);
   }
 
-  async getDashboardStats(): Promise<ResponseDTO<DashboardStats>> {
-    return this.execute<DashboardStats>('/api/analytics/dashboard');
+  async getDashboardStats(params?: { startDate?: string; endDate?: string }): Promise<ResponseDTO<DashboardStats>> {
+    const queryParams = new URLSearchParams();
+    if (params?.startDate) queryParams.append('startDate', params.startDate);
+    if (params?.endDate) queryParams.append('endDate', params.endDate);
+    const qs = queryParams.toString();
+    const endpoint = qs ? `/api/analytics/dashboard?${qs}` : '/api/analytics/dashboard';
+    return this.execute<DashboardStats>(endpoint);
+  }
+
+  async getPersonnelStats(): Promise<ResponseDTO<PersonnelStatsDTO>> {
+    return this.execute<PersonnelStatsDTO>('/api/analytics/personnel');
+  }
+
+  async getRiskAuditStats(): Promise<ResponseDTO<RiskAuditDTO>> {
+    return this.execute<RiskAuditDTO>('/api/analytics/risk-audit');
   }
 
   async getAllUsers(isEnabled?: boolean): Promise<ResponseDTO<User[]>> {

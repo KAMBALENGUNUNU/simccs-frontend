@@ -51,6 +51,53 @@
             "encrypted": "Crypté"
         }
     },
+    "analytics": {
+        "title": "Tableau de Bord Analytique",
+        "subtitle": "Métriques de rapports de crise et aperçus en temps réel",
+        "export": {
+            "commandCenter": "Résumé du Centre de Commandement",
+            "personnelAudit": "Audit du Personnel",
+            "misinfoAudit": "Audit de Désinformation",
+            "live": "En Direct"
+        },
+        "modal": {
+            "title": "Sélectionner l'Intervalle de Dates",
+            "allTime": "Tout le Temps (Historique Complet)",
+            "today": "Aujourd'hui (Dernières 24 Heures)",
+            "weekly": "Cette Semaine (7 Derniers Jours)",
+            "monthly": "Ce Mois (30 Derniers Jours)",
+            "custom": "Plage de Dates Personnalisée",
+            "startDate": "Date de Début",
+            "endDate": "Date de Fin",
+            "generating": "Génération...",
+            "download": "Télécharger le PDF",
+            "cancel": "Annuler"
+        },
+        "cards": {
+            "totalReports": "Total des Rapports Actifs",
+            "awaitingReview": "En Attente d'Examen",
+            "approved": "Approuvés & Publiés",
+            "rejected": "Rejetés",
+            "misinfoRisks": "Risques de Désinformation",
+            "criticalPriority": "Priorité Critique"
+        }
+    },
+    "pdf": {
+        "commandCenter": {
+            "title": "Aperçu du Centre de Commandement",
+            "subtitle": "Résumé Global des Opérations de Crise"
+        },
+        "rawStatus": "Répartition Brute des Statuts",
+        "detailedLogs": "Journaux d'Incidents Détaillés",
+        "columns": {
+            "title": "Titre du Rapport",
+            "author": "Auteur",
+            "editor": "Dernier Éditeur",
+            "status": "Statut",
+            "date": "Date"
+        },
+        "noReports": "Aucun rapport trouvé dans l'intervalle sélectionné."
+    },
     "welcome": {
         "brand": "SIMCCS",
         "title1": "Commande de Crise.",

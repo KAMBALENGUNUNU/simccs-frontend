@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Layout } from '../components/Layout';
 import { apiClient } from '../services/api';
-import { ReportResponse, UserRole } from '../types/api';
+import { ReportAction, ChatMessage, WorkflowAction, ChannelDTO, AiEditorRequest, AiAnalysisResponse, ReportResponse, UserRole } from '../types/api';
 import { useAuth } from '../contexts/AuthContext';
 import {
     MapPin,
@@ -24,11 +24,13 @@ import {
     Globe,
     Activity,
     Send as SendIcon,
-    Wand2
+    Wand2,
+    Download
 } from 'lucide-react';
-
 import { fetchEventSource } from '@microsoft/fetch-event-source';
 import { useRef } from 'react';
+import { useReactToPrint } from 'react-to-print';
+import { IncidentBriefingPDF } from '../components/reports/pdf/IncidentBriefingPDF';
 
 interface ReportVersion {
     id: number;
@@ -36,8 +38,6 @@ interface ReportVersion {
     changeReason: string;
     createdAt: string;
 }
-
-import { ReportAction, ChatMessage, WorkflowAction, ChannelDTO, AiEditorRequest } from '../types/api';
 
 export function ReportDetails() {
     const { id } = useParams<{ id: string }>();
@@ -57,7 +57,7 @@ export function ReportDetails() {
     const [uploading, setUploading] = useState(false);
 
     const [aiLoading, setAiLoading] = useState(false);
-    const [aiResult, setAiResult] = useState<{ confidenceScore: number; reason: string } | null>(null);
+    const [aiResult, setAiResult] = useState<AiAnalysisResponse | null>(null);
     const [aiError, setAiError] = useState('');
 
     const [actions, setActions] = useState<ReportAction[]>([]);
@@ -73,6 +73,13 @@ export function ReportDetails() {
     const [isChatConnected, setIsChatConnected] = useState(false);
     const sseControllerRef = useRef<AbortController | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
+
+    const printRef = useRef<HTMLDivElement>(null);
+
+    const handlePrint = useReactToPrint({
+        contentRef: printRef,
+        documentTitle: report ? `Briefing_${report.id}_${report.title.replace(/\s+/g, '_')}` : 'Crisis_Briefing'
+    });
 
     const isAuthor = report?.authorId === user?.id ||
         (user?.id && report?.authorName === user?.id.toString()) ||
@@ -137,8 +144,11 @@ export function ReportDetails() {
             await apiClient.updateReport(report.id, {
                 ...editForm,
                 latitude: report.latitude,
-                longitude: report.longitude
-            });
+                longitude: report.longitude,
+                locationName: report.locationName,
+                reportType: report.reportType,
+                priority: report.priority
+            } as any);
             setIsEditing(false);
             loadReport();
         } catch {
@@ -315,13 +325,26 @@ export function ReportDetails() {
             const file = e.target.files[0];
             const fileName = await apiClient.uploadMedia(file);
 
+            const existingFilenames = (report.mediaFiles || []).map(url => {
+                try {
+                    return new URL(url).pathname.split('/').pop() || '';
+                } catch {
+                    // Fallback if not a valid URL
+                    return url.split('?')[0].split('/').pop() || url;
+                }
+            }).filter(Boolean);
+
             await apiClient.updateReport(report.id, {
                 ...editForm,
                 latitude: report.latitude,
                 longitude: report.longitude,
-                mediaFiles: [...(report.mediaFiles || []), fileName]
-            });
+                locationName: report.locationName,
+                reportType: report.reportType,
+                priority: report.priority,
+                mediaFiles: [...existingFilenames, fileName]
+            } as any);
             alert('Asset linked successfully: ' + fileName);
+            loadReport();
         } catch {
             alert('Asset transmission failed.');
         } finally {
@@ -372,6 +395,11 @@ export function ReportDetails() {
                     </button>
                     {!isEditing && (
                         <div className="flex flex-wrap items-center gap-2">
+                            {hasRole(UserRole.ADMIN) && report && (
+                                <button onClick={handlePrint} className="flex items-center px-3 py-1.5 bg-gradient-to-r from-slate-900 to-slate-800 dark:from-slate-700 dark:to-slate-800 text-white font-semibold text-xs rounded-lg shadow-sm ring-1 ring-slate-900/5 transition-all hover:shadow-md hover:from-slate-800 hover:to-slate-700 group">
+                                    <Download className="w-3.5 h-3.5 mr-1.5 group-hover:-translate-y-0.5 transition-transform" /> Export PDF
+                                </button>
+                            )}
                             {hasRole(UserRole.ADMIN) && report?.status !== 'PUBLISHED' && (
                                 <button onClick={handlePublish} className="flex items-center px-4 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-white hover:from-emerald-600 hover:to-teal-600 font-bold text-sm rounded-xl shadow-sm ring-1 ring-emerald-500/50 transition-all hover:shadow-lg hover:shadow-emerald-500/25">
                                     <Globe className="w-4 h-4 mr-2" /> Publish Report
@@ -405,12 +433,33 @@ export function ReportDetails() {
                     )}
                 </div>
 
+                {report?.flagged && (
+                    <div className="p-6 bg-rose-500/10 dark:bg-rose-500/20 border-2 border-rose-500/50 rounded-3xl flex items-center justify-between shadow-lg shadow-rose-500/10 animate-pulse transition-all">
+                        <div className="flex items-center space-x-4">
+                            <div className="w-12 h-12 bg-rose-500 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-rose-500/40">
+                                <AlertTriangle className="w-7 h-7" />
+                            </div>
+                            <div>
+                                <h3 className="text-lg font-black text-rose-600 dark:text-rose-400 uppercase tracking-tight">Misinformation Alert</h3>
+                                <p className="text-sm font-bold text-rose-800/80 dark:text-rose-300/80">This intelligence briefing has been officially flagged by the moderation team. Proceed with extreme caution.</p>
+                            </div>
+                        </div>
+                        <div className="hidden md:block">
+                            <span className="px-4 py-2 bg-rose-500 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-md">Secluded Content</span>
+                        </div>
+                    </div>
+                )}
+
                 {error && (
                     <div className="p-4 bg-rose-50 dark:bg-rose-900/30 border border-rose-200 dark:border-rose-800/50 rounded-2xl flex items-start space-x-3 shadow-sm transition-colors">
                         <AlertTriangle className="w-5 h-5 text-rose-600 dark:text-rose-400 flex-shrink-0 mt-0.5" />
                         <p className="text-sm font-medium text-rose-800 dark:text-rose-300">{error}</p>
                     </div>
                 )}
+
+                <div className="hidden">
+                    {report && <IncidentBriefingPDF ref={printRef} data={report} />}
+                </div>
 
                 <div className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl rounded-3xl shadow-sm border border-slate-200/60 dark:border-slate-800/60 overflow-hidden relative transition-colors">
                     <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-50/50 dark:bg-indigo-900/10 rounded-bl-full -z-10 transition-colors"></div>
@@ -548,12 +597,33 @@ export function ReportDetails() {
                                                         <p className="text-sm font-bold text-slate-700 dark:text-slate-300 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">{new Date(report.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}</p>
                                                     </div>
                                                 </div>
-                                                {report.casualtyCount !== undefined && report.casualtyCount > 0 && (
-                                                    <div className="group flex items-center px-4 py-2.5 bg-rose-50/50 dark:bg-rose-900/30 backdrop-blur-md rounded-2xl ring-1 ring-rose-500/20 dark:ring-rose-500/30 shadow-sm hover:shadow-md hover:ring-rose-500/40 hover:-translate-y-0.5 transition-all duration-300 ease-[cubic-bezier(0.25,1,0.5,1)]">
-                                                        <AlertTriangle className="w-4 h-4 mr-2.5 text-rose-500 dark:text-rose-400 group-hover:scale-110 transition-transform" />
+                                                {/* Priority chip */}
+                                                {report.priority && (
+                                                    <div className={`group flex items-center px-4 py-2.5 backdrop-blur-md rounded-2xl ring-1 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 ease-[cubic-bezier(0.25,1,0.5,1)] ${report.priority === 'URGENT' ? 'bg-rose-50/80 dark:bg-rose-900/20 ring-rose-500/20 dark:ring-rose-800/40 hover:ring-rose-500/40' :
+                                                        report.priority === 'HIGH' ? 'bg-amber-50/80 dark:bg-amber-900/20 ring-amber-500/20 dark:ring-amber-800/40 hover:ring-amber-500/40' :
+                                                            report.priority === 'LOW' ? 'bg-slate-50 dark:bg-slate-800/50 ring-slate-200/50 dark:ring-slate-700/50' :
+                                                                'bg-indigo-50/50 dark:bg-indigo-900/20 ring-indigo-500/20 dark:ring-indigo-800/40 hover:ring-indigo-500/40'
+                                                        }`}>
+                                                        <span className={`w-2.5 h-2.5 rounded-full mr-2.5 shrink-0 transition-transform group-hover:scale-125 ${report.priority === 'URGENT' ? 'bg-rose-500' :
+                                                            report.priority === 'HIGH' ? 'bg-amber-500' :
+                                                                report.priority === 'LOW' ? 'bg-slate-400' : 'bg-indigo-400'
+                                                            }`} />
                                                         <div>
-                                                            <p className="text-[9px] uppercase tracking-widest font-black text-rose-400 dark:text-rose-500 mb-0.5 transition-colors">Casualties</p>
-                                                            <p className="text-sm font-bold text-rose-700 dark:text-rose-400 group-hover:text-rose-600 dark:group-hover:text-rose-300 transition-colors">{report.casualtyCount} Recorded</p>
+                                                            <p className="text-[9px] uppercase tracking-widest font-black text-slate-400 dark:text-slate-500 mb-0.5">Priority</p>
+                                                            <p className={`text-sm font-bold ${report.priority === 'URGENT' ? 'text-rose-700 dark:text-rose-400' :
+                                                                report.priority === 'HIGH' ? 'text-amber-700 dark:text-amber-400' :
+                                                                    report.priority === 'LOW' ? 'text-slate-600 dark:text-slate-400' : 'text-indigo-700 dark:text-indigo-400'
+                                                                }`}>{report.priority}</p>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                                {/* Report Type chip */}
+                                                {report.reportType && (
+                                                    <div className="group flex items-center px-4 py-2.5 bg-white/50 dark:bg-slate-800/50 backdrop-blur-md rounded-2xl ring-1 ring-slate-200/50 dark:ring-slate-700/50 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 ease-[cubic-bezier(0.25,1,0.5,1)]">
+                                                        <FileText className="w-4 h-4 mr-2.5 text-violet-500 dark:text-violet-400 group-hover:scale-110 transition-transform" />
+                                                        <div>
+                                                            <p className="text-[9px] uppercase tracking-widest font-black text-slate-400 dark:text-slate-500 mb-0.5">Type</p>
+                                                            <p className="text-sm font-bold text-slate-700 dark:text-slate-300">{report.reportType.replace('_', ' ')}</p>
                                                         </div>
                                                     </div>
                                                 )}
@@ -629,7 +699,7 @@ export function ReportDetails() {
                                                         </div>
                                                         <div className="flex-1 text-center sm:text-left">
                                                             <h3 className="text-sm font-black uppercase tracking-widest text-slate-800 dark:text-slate-200 mb-3 flex items-center justify-center sm:justify-start gap-2 transition-colors">
-                                                                <Brain className="w-5 h-5 text-indigo-500" /> AI Misinformation Analysis
+                                                                <Brain className="w-5 h-5 text-indigo-500" /> Layer 1: Gemini AI Logical Analysis
                                                             </h3>
                                                             <div className="relative text-left">
                                                                 <div className="absolute -left-3 sm:-left-4 top-0 bottom-0 w-1 bg-gradient-to-b from-indigo-500 to-purple-500 rounded-full hidden sm:block"></div>
@@ -637,20 +707,72 @@ export function ReportDetails() {
                                                                     "{aiResult.reason}"
                                                                 </p>
                                                             </div>
+
+                                                            {aiResult.factCheckHits && aiResult.factCheckHits.length > 0 ? (
+                                                                <div className="mt-8 pt-6 border-t border-slate-100 dark:border-slate-700/50 space-y-4">
+                                                                    <div className="flex items-center justify-between">
+                                                                        <h4 className="text-xs font-black uppercase tracking-[0.2em] text-emerald-600 dark:text-emerald-400 flex items-center gap-2">
+                                                                            <Globe className="w-4 h-4" /> Layer 2: Authoritative Fact Verification
+                                                                        </h4>
+                                                                        <span className="text-[10px] bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 rounded-lg font-bold">
+                                                                            {aiResult.factCheckHits.length} Source{aiResult.factCheckHits.length > 1 ? 's' : ''} Found
+                                                                        </span>
+                                                                    </div>
+                                                                    <div className="grid gap-3">
+                                                                        {aiResult.factCheckHits.map((hit, idx) => (
+                                                                            <div key={idx} className="bg-slate-50 dark:bg-slate-900/50 rounded-2xl p-4 border border-slate-100 dark:border-slate-800 transition-all hover:border-emerald-500/30 group/hit shadow-sm">
+                                                                                <div className="flex justify-between items-start gap-4 mb-2">
+                                                                                    <span className={`text-[10px] px-2 py-0.5 rounded-md font-bold uppercase tracking-wider ${hit.rating.toLowerCase().includes('false') || hit.rating.toLowerCase().includes('faux') || hit.rating.toLowerCase().includes('misleading') ? 'bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>
+                                                                                        {hit.rating}
+                                                                                    </span>
+                                                                                    <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase">{hit.publisher}</span>
+                                                                                </div>
+                                                                                <p className="text-xs font-bold text-slate-800 dark:text-slate-200 mb-2 line-clamp-2 leading-relaxed italic">"{hit.claim}"</p>
+                                                                                {hit.sourceUrl && (
+                                                                                    <a href={hit.sourceUrl} target="_blank" rel="noreferrer" className="inline-flex items-center text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors group-hover/hit:translate-x-1 duration-300">
+                                                                                        Read Source Investigation <Eye className="w-3 h-3 ml-1" />
+                                                                                    </a>
+                                                                                )}
+                                                                            </div>
+                                                                        ))}
+                                                                    </div>
+                                                                </div>
+                                                            ) : (
+                                                                <div className="mt-8 pt-6 border-t border-slate-100 dark:border-slate-700/50">
+                                                                    <div className="flex items-center gap-2 text-slate-400 dark:text-slate-500">
+                                                                        <Globe className="w-4 h-4 opacity-50" />
+                                                                        <p className="text-xs font-medium italic">No direct matches found in authoritative fact-checking databases for this specific query.</p>
+                                                                    </div>
+                                                                </div>
+                                                            )}
                                                         </div>
+
                                                     </div>
                                                 </div>
                                             )}
 
-                                            {report.categories && report.categories.length > 0 && (
+                                            {(report.reportType || report.priority) && (
                                                 <div className="pt-6 border-t border-slate-100 dark:border-slate-800 transition-colors">
-                                                    <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-3 transition-colors">Assigned Classifications</h3>
+                                                    <h3 className="text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-3 transition-colors">Editorial Classification</h3>
                                                     <div className="flex flex-wrap gap-2">
-                                                        {report.categories.map((category, idx) => (
-                                                            <span key={idx} className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-bold shadow-sm uppercase tracking-wide transition-colors hover:shadow-md hover:-translate-y-0.5 cursor-default hover:text-indigo-600 dark:hover:text-indigo-400">
-                                                                {category}
+                                                        {report.priority && (
+                                                            <span className={`px-3 py-1.5 rounded-xl text-xs font-black shadow-sm uppercase tracking-wide transition-all hover:shadow-md hover:-translate-y-0.5 cursor-default flex items-center gap-1.5 ${report.priority === 'URGENT' ? 'bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400' :
+                                                                report.priority === 'HIGH' ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400' :
+                                                                    report.priority === 'LOW' ? 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400' :
+                                                                        'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-400'
+                                                                }`}>
+                                                                <span className={`w-2 h-2 rounded-full ${report.priority === 'URGENT' ? 'bg-rose-500' :
+                                                                    report.priority === 'HIGH' ? 'bg-amber-500' :
+                                                                        report.priority === 'LOW' ? 'bg-slate-400' : 'bg-indigo-400'
+                                                                    }`} />
+                                                                {report.priority} Priority
                                                             </span>
-                                                        ))}
+                                                        )}
+                                                        {report.reportType && (
+                                                            <span className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-bold shadow-sm uppercase tracking-wide transition-all hover:shadow-md hover:-translate-y-0.5 cursor-default hover:text-violet-600 dark:hover:text-violet-400">
+                                                                {report.reportType.replace('_', ' ')}
+                                                            </span>
+                                                        )}
                                                     </div>
                                                 </div>
                                             )}
@@ -730,18 +852,25 @@ export function ReportDetails() {
                                                     {showHistory && (
                                                         <div className="space-y-4 mt-6 animate-fade-in relative z-10 before:absolute before:inset-0 before:ml-[11px] before:-z-10 before:w-0.5 before:bg-slate-200 dark:before:bg-slate-700 flex-1 overflow-y-auto max-h-[300px] pr-2 custom-scrollbar">
                                                             {versions.map((v, i) => (
-                                                                <div key={v.id} className="relative pl-8 group/item hover:-translate-y-0.5 transition-transform">
-                                                                    <div className={`absolute left-0 top-1.5 w-6 h-6 rounded-full flex items-center justify-center shrink-0 ring-4 ring-white dark:ring-slate-800 transition-colors ${i === 0 ? 'bg-indigo-500 text-white shadow-md shadow-indigo-500/20' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400 group-hover/item:text-indigo-500'}`}>
+                                                                <Link
+                                                                    key={v.id}
+                                                                    to={`/reports/${id}/versions/${v.id}`}
+                                                                    className="relative pl-8 group/item hover:-translate-y-0.5 transition-transform block"
+                                                                >
+                                                                    <div className={`absolute left-0 top-1.5 w-6 h-6 rounded-full flex items-center justify-center shrink-0 ring-4 ring-white dark:ring-slate-800 transition-colors ${i === 0 ? 'bg-indigo-500 text-white shadow-md shadow-indigo-500/20' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400 group-hover/item:text-indigo-500 group-hover/item:bg-indigo-100 dark:group-hover/item:bg-indigo-900/50'}`}>
                                                                         {i === 0 ? <CheckCircle className="w-3.5 h-3.5" /> : <Clock className="w-3.5 h-3.5" />}
                                                                     </div>
-                                                                    <div className={`bg-white dark:bg-slate-900 p-4 rounded-2xl border transition-all shadow-sm group-hover/item:shadow-md ${i === 0 ? 'border-indigo-200 dark:border-indigo-500/50 ring-1 ring-indigo-500/10' : 'border-slate-200 dark:border-slate-700 group-hover/item:border-indigo-200 dark:group-hover/item:border-indigo-900/50'}`}>
+                                                                    <div className={`bg-white dark:bg-slate-900 p-4 rounded-2xl border transition-all shadow-sm group-hover/item:shadow-md group-hover/item:border-indigo-300 dark:group-hover/item:border-indigo-700/60 cursor-pointer ${i === 0 ? 'border-indigo-200 dark:border-indigo-500/50 ring-1 ring-indigo-500/10' : 'border-slate-200 dark:border-slate-700'}`}>
                                                                         <div className="flex justify-between items-center mb-1.5">
                                                                             <span className={`text-xs font-bold ${i === 0 ? 'text-indigo-700 dark:text-indigo-400' : 'text-slate-800 dark:text-slate-200'}`}>v{v.versionNumber}</span>
-                                                                            <span className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500">{new Date(v.createdAt).toLocaleDateString()}</span>
+                                                                            <div className="flex items-center gap-2">
+                                                                                <span className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500">{new Date(v.createdAt).toLocaleDateString()}</span>
+                                                                                <span className="text-[9px] font-black text-indigo-500 dark:text-indigo-400 uppercase tracking-wider opacity-0 group-hover/item:opacity-100 transition-opacity bg-indigo-50 dark:bg-indigo-900/40 px-2 py-0.5 rounded-lg">View →</span>
+                                                                            </div>
                                                                         </div>
                                                                         <p className="text-[11px] text-slate-600 dark:text-slate-400 font-medium leading-relaxed transition-colors">{v.changeReason}</p>
                                                                     </div>
-                                                                </div>
+                                                                </Link>
                                                             ))}
                                                             {versions.length === 0 && (
                                                                 <div className="pl-6 text-sm font-medium text-slate-500 dark:text-slate-400 italic">No historical revisions found.</div>

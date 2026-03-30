@@ -21,6 +21,20 @@ export enum WorkflowAction {
   PUBLISH = 'PUBLISH',
 }
 
+export enum ReportType {
+  BREAKING = 'BREAKING',
+  EXCLUSIVE = 'EXCLUSIVE',
+  PRESS_RELEASE = 'PRESS_RELEASE',
+  FEATURE = 'FEATURE',
+}
+
+export enum Priority {
+  URGENT = 'URGENT',
+  HIGH = 'HIGH',
+  NORMAL = 'NORMAL',
+  LOW = 'LOW',
+}
+
 export interface ReportAction {
   id: number;
   reportId: number;
@@ -96,8 +110,8 @@ export interface ReportRequest {
   latitude: number;
   longitude: number;
   locationName?: string;
-  casualtyCount?: number;
-  categories?: string[];
+  reportType?: string;
+  priority?: string;
   mediaFiles?: string[];
 }
 
@@ -112,11 +126,13 @@ export interface ReportResponse {
   latitude: number;
   longitude: number;
   locationName?: string;
-  casualtyCount?: number;
+  reportType?: string;
+  priority?: string;
   createdAt: string;
-  categories?: string[];
   mediaFiles?: string[];
+  flagged?: boolean;
 }
+
 
 export interface ReviewRequest {
   action: WorkflowAction;
@@ -159,14 +175,20 @@ export interface DashboardStats {
   totalReports: number;
   pendingReports: number;
   approvedReports: number;
+  rejectedReports: number;
   flaggedReports: number;
-  totalCasualties: number;
+  urgentReports: number;
+  totalCasualties?: number;
   reportsByStatus: Record<string, number>;
+  reportsByTime?: Record<string, number>;
+  reportsByCategory?: Record<string, number>;
   recentActivity: Array<{
     id: number;
     title: string;
     status: string;
     createdAt: string;
+    authorName?: string;
+    editorName?: string;
   }>;
 }
 
@@ -175,4 +197,56 @@ export interface ChannelDTO {
   name: string;
   description?: string;
   type: string;
+}
+
+export interface FactCheckHit {
+  claim: string;
+  rating: string;
+  sourceUrl: string;
+  publisher: string;
+}
+
+export interface AiAnalysisResponse {
+  confidenceScore: number;
+  reason: string;
+  factCheckHits?: FactCheckHit[];
+}
+
+export interface JournalistStat {
+  id: number;
+  name: string;
+  email: string;
+  totalReports: number;
+  verifiedReports: number;
+  rejectedReports: number;
+  accuracyRate: number;
+}
+
+export interface EditorStat {
+  id: number;
+  name: string;
+  email: string;
+  totalReviews: number;
+  flagsRaised: number;
+  averageReviewTimeHours: number;
+}
+
+export interface PersonnelStatsDTO {
+  journalists: JournalistStat[];
+  editors: EditorStat[];
+}
+
+export interface FlaggedReportItem {
+  reportId: number;
+  reportTitle: string;
+  authorName: string;
+  flaggedBy: string;
+  reason: string;
+  flaggedAt: string;
+}
+
+export interface RiskAuditDTO {
+  flaggedReports: FlaggedReportItem[];
+  totalFlags: number;
+  uniqueReportsFlagged: number;
 }

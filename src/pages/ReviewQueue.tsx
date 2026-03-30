@@ -11,11 +11,30 @@ import {
   MapPin,
   ClipboardCheck,
   ChevronRight,
+  Zap,
+  Star,
+  Newspaper,
+  BookOpen,
 } from 'lucide-react';
+
+const PRIORITY_CONFIG: Record<string, { label: string; dot: string; badge: string; leftBar: string }> = {
+  URGENT: { label: 'Urgent', dot: 'bg-rose-500', badge: 'bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-400 ring-1 ring-rose-500/20', leftBar: 'bg-rose-500' },
+  HIGH: { label: 'High', dot: 'bg-amber-500', badge: 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400 ring-1 ring-amber-500/20', leftBar: 'bg-amber-500' },
+  NORMAL: { label: 'Normal', dot: 'bg-indigo-400', badge: 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 ring-1 ring-indigo-500/20', leftBar: 'bg-indigo-400' },
+  LOW: { label: 'Low', dot: 'bg-slate-400', badge: 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400', leftBar: 'bg-slate-300' },
+};
+
+const TYPE_CONFIG: Record<string, { label: string; icon: React.ElementType; badge: string }> = {
+  BREAKING: { label: 'Breaking', icon: Zap, badge: 'bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400' },
+  EXCLUSIVE: { label: 'Exclusive', icon: Star, badge: 'bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400' },
+  PRESS_RELEASE: { label: 'Press Release', icon: Newspaper, badge: 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400' },
+  FEATURE: { label: 'Feature', icon: BookOpen, badge: 'bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400' },
+};
 
 export function ReviewQueue() {
   const [reports, setReports] = useState<ReportResponse[]>([]);
   const [selectedReport, setSelectedReport] = useState<ReportResponse | null>(null);
+  const [loadingReport, setLoadingReport] = useState(false);
   const [action, setAction] = useState<WorkflowAction | null>(null);
   const [comment, setComment] = useState('');
   const [loading, setLoading] = useState(true);
@@ -34,6 +53,22 @@ export function ReviewQueue() {
       setError(err instanceof Error ? err.message : 'Failed to load reports');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSelectReport = async (report: ReportResponse) => {
+    setAction(null);
+    setComment('');
+    setLoadingReport(true);
+    try {
+      // Fetch full report to get decrypted content (list view returns encrypted placeholder)
+      const response = await apiClient.getReportById(report.id);
+      setSelectedReport(response.data);
+    } catch {
+      // Fallback to the list item if individual fetch fails
+      setSelectedReport(report);
+    } finally {
+      setLoadingReport(false);
     }
   };
 
@@ -161,14 +196,15 @@ export function ReviewQueue() {
                 {reports.map((report) => (
                   <button
                     key={report.id}
-                    onClick={() => setSelectedReport(report)}
+                    onClick={() => handleSelectReport(report)}
                     className={`w-full text-left p-4 mb-2 rounded-2xl transition-all duration-300 relative overflow-hidden group border ${selectedReport?.id === report.id
                       ? 'bg-indigo-50 dark:bg-indigo-900/40 border-indigo-200 dark:border-indigo-500/50 shadow-sm'
                       : 'bg-transparent border-transparent hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:border-slate-200 dark:hover:border-slate-700/50'
                       }`}
                   >
+                    {/* Priority color bar on left when selected */}
                     {selectedReport?.id === report.id && (
-                      <div className="absolute left-0 top-0 bottom-0 w-1 bg-indigo-500 rounded-l-2xl"></div>
+                      <div className={`absolute left-0 top-0 bottom-0 w-1 rounded-l-2xl ${PRIORITY_CONFIG[report.priority ?? 'NORMAL']?.leftBar ?? 'bg-indigo-500'}`} />
                     )}
                     <div className="flex justify-between items-start mb-2">
                       <h3 className={`text-sm font-bold truncate pr-3 flex-1 ${selectedReport?.id === report.id ? 'text-indigo-900 dark:text-indigo-300' : 'text-slate-900 dark:text-slate-200 group-hover:text-indigo-700 dark:group-hover:text-indigo-400 transition-colors'}`}>
@@ -177,12 +213,28 @@ export function ReviewQueue() {
                       <ChevronRight className={`w-4 h-4 shrink-0 transition-transform ${selectedReport?.id === report.id ? 'text-indigo-500 translate-x-1' : 'text-slate-300 dark:text-slate-600 opacity-0 group-hover:opacity-100'}`} />
                     </div>
                     <p className="text-slate-500 dark:text-slate-400 text-xs line-clamp-2 mb-3 leading-relaxed transition-colors">{report.summary}</p>
-                    <div className="flex justify-between items-center mt-auto">
-                      <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 transition-colors">
-                        {new Date(report.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      {/* Priority + Type badges */}
+                      <div className="flex items-center gap-1.5">
+                        {report.priority && PRIORITY_CONFIG[report.priority] && (
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-wider ${PRIORITY_CONFIG[report.priority].badge}`}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${PRIORITY_CONFIG[report.priority].dot}`} />
+                            {PRIORITY_CONFIG[report.priority].label}
+                          </span>
+                        )}
+                        {report.reportType && TYPE_CONFIG[report.reportType] && (() => {
+                          const cfg = TYPE_CONFIG[report.reportType!];
+                          const Icon = cfg.icon;
+                          return (
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-bold ${cfg.badge}`}>
+                              <Icon className="w-2.5 h-2.5" />
+                              {cfg.label}
+                            </span>
+                          );
+                        })()}
                       </div>
-                      <div className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-semibold rounded text-[10px] transition-colors">
-                        {report.authorName}
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 transition-colors shrink-0">
+                        {new Date(report.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
                       </div>
                     </div>
                   </button>
@@ -220,18 +272,30 @@ export function ReviewQueue() {
                       <p className="text-[10px] uppercase tracking-wider font-bold text-slate-400 dark:text-slate-500 mb-1 transition-colors">Location</p>
                       <div className="flex items-center space-x-1 text-sm font-semibold text-slate-700 dark:text-slate-300 transition-colors">
                         <MapPin className="w-3.5 h-3.5 text-indigo-500 dark:text-indigo-400" />
-                        <span className="truncate">{selectedReport.latitude}, {selectedReport.longitude}</span>
+                        <span className="truncate">{selectedReport.locationName || `${selectedReport.latitude}, ${selectedReport.longitude}`}</span>
                       </div>
                     </div>
-                    {selectedReport.casualtyCount !== undefined && (
-                      <div>
-                        <p className="text-[10px] uppercase tracking-wider font-bold text-slate-400 dark:text-slate-500 mb-1 transition-colors">Casualties</p>
-                        <div className="flex items-center space-x-1 text-sm font-bold text-rose-600 dark:text-rose-400 transition-colors">
-                          <AlertTriangle className="w-3.5 h-3.5" />
-                          <span>{selectedReport.casualtyCount} recorded</span>
-                        </div>
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wider font-bold text-slate-400 dark:text-slate-500 mb-1 transition-colors">Classification</p>
+                      <div className="flex flex-col gap-1">
+                        {selectedReport.priority && PRIORITY_CONFIG[selectedReport.priority] && (
+                          <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-wider w-fit ${PRIORITY_CONFIG[selectedReport.priority].badge}`}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${PRIORITY_CONFIG[selectedReport.priority].dot}`} />
+                            {PRIORITY_CONFIG[selectedReport.priority].label}
+                          </span>
+                        )}
+                        {selectedReport.reportType && TYPE_CONFIG[selectedReport.reportType] && (() => {
+                          const cfg = TYPE_CONFIG[selectedReport.reportType!];
+                          const Icon = cfg.icon;
+                          return (
+                            <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-[10px] font-bold w-fit ${cfg.badge}`}>
+                              <Icon className="w-2.5 h-2.5" />
+                              {cfg.label}
+                            </span>
+                          );
+                        })()}
                       </div>
-                    )}
+                    </div>
                   </div>
                 </div>
 
@@ -247,7 +311,14 @@ export function ReviewQueue() {
                   <div>
                     <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3 ml-1 transition-colors">Full Decrypted Payload</h4>
                     <div className="text-slate-800 dark:text-slate-300 whitespace-pre-wrap leading-relaxed transition-colors font-serif bg-slate-50/50 dark:bg-slate-800/30 p-6 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 shadow-inner">
-                      {selectedReport.content}
+                      {loadingReport ? (
+                        <div className="flex items-center justify-center py-8">
+                          <div className="w-6 h-6 border-2 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
+                          <span className="ml-3 text-sm text-slate-400 dark:text-slate-500">Decrypting payload...</span>
+                        </div>
+                      ) : (
+                        selectedReport.content
+                      )}
                     </div>
                   </div>
 

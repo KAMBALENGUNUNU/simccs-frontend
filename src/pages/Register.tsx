@@ -47,7 +47,7 @@ export function Register() {
       setSuccess(true);
       setTimeout(() => {
         navigate('/login');
-      }, 4000);
+      }, 8000);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Registration sequence rejected.');
     } finally {

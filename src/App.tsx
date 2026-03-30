@@ -23,6 +23,7 @@ import { ResetPassword } from './pages/ResetPassword';
 import { FlaggedReports } from './pages/FlaggedReports';
 import { Chat } from './pages/Chat';
 import { Settings } from './pages/Settings';
+import { ReportVersionView } from './pages/ReportVersionView';
 
 function App() {
     return (
@@ -141,6 +142,15 @@ function App() {
                             element={
                                 <ProtectedRoute>
                                     <ReportDetails />
+                                </ProtectedRoute>
+                            }
+                        />
+
+                        <Route
+                            path="/reports/:reportId/versions/:versionId"
+                            element={
+                                <ProtectedRoute requiredRoles={[UserRole.EDITOR, UserRole.ADMIN]}>
+                                    <ReportVersionView />
                                 </ProtectedRoute>
                             }
                         />

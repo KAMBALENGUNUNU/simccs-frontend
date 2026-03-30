@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Layout } from '../components/Layout';
 import { apiClient } from '../services/api';
 import { ReportResponse } from '../types/api';
@@ -11,15 +11,21 @@ import {
   Filter,
   MapPin,
   AlertTriangle,
+  Tag,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { UserRole } from '../types/api';
 
 export function Reports() {
+  const [searchParams] = useSearchParams();
+  const initialStatus = searchParams.get('status') || 'all';
+  const initialCategory = searchParams.get('category') || 'all';
+
   const [reports, setReports] = useState<ReportResponse[]>([]);
   const [filteredReports, setFilteredReports] = useState<ReportResponse[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<string>(initialStatus);
+  const [categoryFilter, setCategoryFilter] = useState<string>(initialCategory);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const { hasRole } = useAuth();
@@ -30,7 +36,7 @@ export function Reports() {
 
   useEffect(() => {
     filterReports();
-  }, [searchTerm, statusFilter, reports]);
+  }, [searchTerm, statusFilter, categoryFilter, reports]);
 
   const loadReports = async () => {
     try {
@@ -46,10 +52,26 @@ export function Reports() {
   const filterReports = () => {
     let filtered = [...reports];
 
+    // Status Filter
     if (statusFilter !== 'all') {
-      filtered = filtered.filter((r) => r.status === statusFilter);
+      // Special case: "Approved & Published" grouping from dashboard
+      if (statusFilter === 'APPROVED_PUBLISHED') {
+        filtered = filtered.filter((r) => r.status === 'VERIFIED' || r.status === 'PUBLISHED');
+      } else if (statusFilter === 'PENDING_DRAFT') {
+        filtered = filtered.filter((r) => r.status === 'SUBMITTED' || r.status === 'DRAFT');
+      } else {
+        filtered = filtered.filter((r) => r.status === statusFilter);
+      }
     }
 
+    // Category Filter
+    if (categoryFilter !== 'all') {
+      filtered = filtered.filter((r) =>
+        r.categories?.includes(categoryFilter)
+      );
+    }
+
+    // Search Term
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       filtered = filtered.filter(
@@ -129,7 +151,7 @@ export function Reports() {
         )}
 
         <div className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl rounded-2xl border border-slate-200/60 dark:border-slate-800/60 shadow-sm mb-6 p-4 transition-colors">
-          <div className="flex flex-col md:flex-row gap-4">
+          <div className="flex flex-col xl:flex-row gap-4">
             <div className="flex-1 relative group">
               <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400 dark:text-slate-500 group-focus-within:text-indigo-500 dark:group-focus-within:text-indigo-400 transition-colors z-10" />
               <input
@@ -140,20 +162,34 @@ export function Reports() {
                 className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 dark:focus:border-indigo-500 transition-all font-medium text-slate-700 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500 flex items-center relative"
               />
             </div>
-            <div className="relative md:w-64 group">
-              <Filter className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400 dark:text-slate-500 group-focus-within:text-indigo-500 dark:group-focus-within:text-indigo-400 transition-colors z-10 pointer-events-none" />
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="w-full pl-12 pr-10 py-3.5 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 dark:focus:border-indigo-500 transition-all font-bold text-slate-700 dark:text-slate-200 appearance-none cursor-pointer relative"
-              >
-                <option value="all">All Scenarios</option>
-                <option value="PENDING">Pending Review</option>
-                <option value="APPROVED">Verified Intel</option>
-                <option value="REJECTED">Dismissed</option>
-                <option value="REVISION_REQUESTED">Needs Clarification</option>
-                <option value="FLAGGED">Critical/Flagged</option>
-              </select>
+            <div className="flex flex-col sm:flex-row gap-4">
+              <div className="relative md:w-64 group">
+                <Filter className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400 dark:text-slate-500 group-focus-within:text-indigo-500 dark:group-focus-within:text-indigo-400 transition-colors z-10 pointer-events-none" />
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="w-full pl-12 pr-10 py-3.5 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 dark:focus:border-indigo-500 transition-all font-bold text-slate-700 dark:text-slate-200 appearance-none cursor-pointer relative"
+                >
+                  <option value="all">All Statuses</option>
+                  <option value="PENDING_DRAFT">Needs Review (Pending/Draft)</option>
+                  <option value="APPROVED_PUBLISHED">Verified (Approved/Published)</option>
+                  <option value="REJECTED">Dismissed</option>
+                  <option value="REVISION_REQUESTED">Needs Clarification</option>
+                </select>
+              </div>
+              <div className="relative md:w-64 group">
+                <Tag className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400 dark:text-slate-500 group-focus-within:text-indigo-500 dark:group-focus-within:text-indigo-400 transition-colors z-10 pointer-events-none" />
+                <select
+                  value={categoryFilter}
+                  onChange={(e) => setCategoryFilter(e.target.value)}
+                  className="w-full pl-12 pr-10 py-3.5 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 dark:focus:border-indigo-500 transition-all font-bold text-slate-700 dark:text-slate-200 appearance-none cursor-pointer relative"
+                >
+                  <option value="all">All Categories</option>
+                  {Array.from(new Set(reports.flatMap(r => r.categories || []))).map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
         </div>

@@ -13,6 +13,8 @@ import {
   Settings,
 } from 'lucide-react';
 import { UserRole } from '../types/api';
+import { OfflineSync } from './OfflineSync';
+import logo from '../image/simccs_logo.png';
 
 interface LayoutProps {
   children: ReactNode;
@@ -75,15 +77,19 @@ export function Layout({ children }: LayoutProps) {
   );
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-[#0B0F19] transition-colors duration-300 selection:bg-indigo-500/20">
+    <div className="min-h-screen bg-gradient-to-br from-slate-200 via-slate-100 to-slate-300 dark:bg-none dark:bg-[#0B0F19] transition-colors duration-300 selection:bg-indigo-500/20 relative overflow-hidden">
+      {/* Premium Universal Cubes Grid - Fully Clear and Visible */}
+      <div className="absolute inset-0 pointer-events-none z-0">
+        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-[0.12] dark:opacity-[0.2] transition-opacity duration-500"></div>
+      </div>
+
       <nav className="bg-white/80 dark:bg-[#0B0F19]/80 backdrop-blur-xl border-b border-slate-200/60 dark:border-white/5 sticky top-0 z-50 shadow-sm transition-all duration-300">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex items-center">
               <Link to="/dashboard" className="flex items-center space-x-3 group">
-                <div className="w-10 h-10 bg-gradient-to-br from-indigo-600 to-cyan-500 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/20 group-hover:shadow-indigo-500/40 group-hover:scale-105 transition-all duration-300 relative overflow-hidden">
-                  <div className="absolute inset-0 bg-white/20 scale-0 group-hover:scale-150 rounded-full transition-transform duration-500 opacity-0 group-hover:opacity-100"></div>
-                  <Shield className="w-6 h-6 text-white relative z-10" />
+                <div className="w-12 h-12 flex items-center justify-center rounded-xl overflow-hidden group-hover:scale-105 transition-all duration-300">
+                  <img src={logo} alt="SIMCCS Logo" className="w-full h-full object-contain" />
                 </div>
                 <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-slate-900 to-slate-700 dark:from-white dark:to-slate-300 group-hover:from-indigo-600 group-hover:to-cyan-600 dark:group-hover:from-indigo-400 dark:group-hover:to-cyan-400 transition-colors duration-300">SIMCCS</span>
               </Link>
@@ -119,6 +125,9 @@ export function Layout({ children }: LayoutProps) {
                 </div>
               </div>
               <div className="h-8 w-px bg-slate-200 dark:bg-slate-700 mx-2 hidden sm:block"></div>
+              <div className="hidden sm:flex items-center">
+                <OfflineSync />
+              </div>
               <button
                 onClick={() => navigate('/settings')}
                 className="p-2.5 text-slate-500 dark:text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/40 rounded-xl transition-all duration-300 group shadow-sm ring-1 ring-slate-200 dark:ring-slate-700 hover:ring-indigo-200 dark:hover:ring-indigo-500/50 hover:shadow-md"
