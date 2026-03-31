@@ -103,7 +103,6 @@ export function Welcome() {
               <span>{t('welcome.access')}</span>
             </Link>
 
-
           </div>
 
         </div>
